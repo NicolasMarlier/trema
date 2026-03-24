@@ -1,0 +1,163 @@
+#!/bin/bash
+usage() {
+    echo "Usage:
+    trema logs
+    trema ssh
+    trema console
+    trema init
+    trema destroy
+    trema env
+    trema load_pg_dump #pg_dump_file.sql
+    trema heroku_pg_dump
+"
+}
+
+docker_container_name() {
+    echo "$TREMA_PROJECT_NAME-web-1"
+}
+
+logs() {
+    do_ssh "docker logs -f $(docker_container_name)"
+}
+
+do_ssh() {
+    ssh -t $TREMA_USERNAME@$TREMA_HOSTNAME $1
+}
+
+sanitize_subdomain() {
+    echo "${1//_/-}"
+}
+
+heroku_pg_dump() {
+    echo "Getting production credentials..."
+    POSTGRES_URL=$(heroku config:get DATABASE_URL)
+    FILENAME=data/$TREMA_PROJECT_NAME-dump-$(date '+%Y-%m-%dT%H%M').sql
+    echo "Dumping production data..."
+    pg_dump --data-only --dbname=$POSTGRES_URL > $FILENAME
+    echo "Dump stored in $FILENAME"
+}
+
+add_nginx_config() {
+    SUBDOMAIN=$(sanitize_subdomain "$TREMA_PROJECT_NAME")
+    DOMAIN="$SUBDOMAIN.$TREMA_HOSTNAME"
+    cat <<EOF > tmp-nginx-config
+server {
+    server_name $DOMAIN;
+
+	location / {
+		proxy_pass http://localhost:3000;
+	}
+}
+EOF
+    rsync tmp-nginx-config $TREMA_USERNAME@$TREMA_HOSTNAME:/etc/nginx/sites-enabled/$SUBDOMAIN
+    rm tmp-nginx-config
+    do_ssh "sudo certbot --nginx --non-interactive --domains $DOMAIN"
+    echo "✅ SSL configuration for $DOMAIN added"
+}
+init() {
+    current_folder="${PWD##*/}"
+
+    cat <<EOF > trema.env
+TREMA_HOSTNAME=nicolasm.fr
+TREMA_USERNAME=root
+TREMA_PROJECT_NAME=$current_folder
+EOF
+    
+    echo "✅ trema.env file created in current folder."
+
+
+    export $(grep -v '^#' trema.env | xargs)
+    do_ssh "mkdir -p repos && cd repos && git init --initial-branch=main --bare $TREMA_PROJECT_NAME"
+    rsync -r $(trema_path)/hooks $TREMA_USERNAME@$TREMA_HOSTNAME:repos/$TREMA_PROJECT_NAME
+
+    echo "✅ $TREMA_PROJECT_NAME.git on the VM"
+
+    add_nginx_config
+
+    git remote add trema $TREMA_USERNAME@$TREMA_HOSTNAME:repos/$TREMA_PROJECT_NAME
+    echo "✅ Added new repository 'trema'. Deploy now by using 'git push trema main'"    
+}
+
+destroy() {
+    SUBDOMAIN=$(sanitize_subdomain "$TREMA_PROJECT_NAME")
+    do_ssh "cd apps/$TREMA_PROJECT_NAME && docker compose down --volumes"
+    do_ssh "rm -rf repos/$TREMA_PROJECT_NAME"
+    do_ssh "rm -rf apps/$TREMA_PROJECT_NAME"
+    do_ssh "rm -rf envs/$TREMA_PROJECT_NAME.env"
+    do_ssh "rm /etc/nginx/sites-enabled/$SUBDOMAIN"
+    do_ssh "systemctl restart nginx"
+    git remote remove trema
+    rm trema.env
+}
+
+load_env() {
+    ENV_FILE="trema.env"
+
+    if [[ ! -f "$ENV_FILE" ]]; then
+    echo "Error: $ENV_FILE not found" >&2
+    exit 1
+    fi
+
+    export $(grep -v '^#' "$ENV_FILE" | xargs)
+}
+
+trema_path() {
+    echo $(dirname $(dirname $(which trema)))
+}
+    
+update() {
+    rsync -r $(trema_path)/docker_compose_files $TREMA_USERNAME@$TREMA_HOSTNAME:~
+    rsync -r $(trema_path)/hooks $TREMA_USERNAME@$TREMA_HOSTNAME:repos/$TREMA_PROJECT_NAME
+}
+
+sync_db() {
+    PG_DUMP_FILE_PATH=$1
+    echo "Will load $PG_DUMP_FILE_PATH file DB..."
+
+    PG_DUMP_FILE_NAME=$(basename "$PG_DUMP_FILE_PATH")
+
+    rsync ${PG_DUMP_FILE_PATH} ${TREMA_USERNAME}@${TREMA_HOSTNAME}:/db_dumps/${PG_DUMP_FILE_NAME}
+    
+
+
+    do_ssh "docker exec ${TREMA_PROJECT_NAME}-db-1 sh -c 'PGPASSWORD=\$POSTGRES_PASSWORD psql -U \$POSTGRES_USER \$POSTGRES_DB < /db_dumps/${PG_DUMP_FILE_NAME}'"
+
+    echo "Done."
+}
+
+archive_db() {
+    mkdir -p data
+    PG_DUMP_FILE_NAME="trema-${TREMA_PROJECT_NAME}-$(date '+%Y-%m-%dT%H%M').sql"
+    do_ssh "docker exec ${TREMA_PROJECT_NAME}-db-1 sh -c 'PGPASSWORD=\$POSTGRES_PASSWORD pg_dump --data-only -U \$POSTGRES_USER \$POSTGRES_DB > /db_dumps/${PG_DUMP_FILE_NAME}'"
+    rsync ${TREMA_USERNAME}@${TREMA_HOSTNAME}:/db_dumps/${PG_DUMP_FILE_NAME} data/${PG_DUMP_FILE_PATH}
+
+    echo "Saved in data/$PG_DUMP_FILE_NAME"
+}
+
+console() {
+    do_ssh "docker exec -it $TREMA_PROJECT_NAME-web-1 /bin/bash"
+}
+
+env() {
+    do_ssh "cd apps/$TREMA_PROJECT_NAME && vim .env && docker compose --env-file .env up --build --force-recreate -d"
+}
+
+
+
+case "$1" in
+    init) init ;;
+    destroy) load_env; destroy ;;
+    
+    ssh) load_env; do_ssh ;;
+    console) load_env; console ;;
+    logs) load_env; logs ;;  
+    deploy) load_env; deploy ;;
+    update) load_env; update ;;
+    env) load_env; env ;;
+
+    heroku_pg_dump) load_env; heroku_pg_dump ;;
+    archive_db) load_env; archive_db ;;
+
+    load_pg_dump) load_env; sync_db $2 ;;
+    *) usage ;;
+esac

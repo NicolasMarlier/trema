@@ -1,0 +1,72 @@
+#!/bin/bash
+
+random_postgres_user() {
+    echo $(tr -dc '[:alpha:]' < /dev/urandom | head -c 10)
+}
+
+random_postgres_password() {
+    echo $(tr -dc '[:alpha:]' < /dev/urandom | head -c 10)
+}
+
+sanitize_subdomain() {
+    echo "${1//_/-}"
+}
+
+echo "Deployment will start..."
+
+
+
+REPO_DIR=$PWD
+APP_NAME=$(basename "$REPO_DIR")
+WORK_TREE=$(dirname $(dirname $REPO_DIR))/apps/$APP_NAME
+DOCKER_FILES_DIR=$(dirname $(dirname $REPO_DIR))/docker_compose_files
+
+echo "🚀 Deploying $APP_NAME..."
+
+# Create working tree if not exists
+mkdir -p "$WORK_TREE"
+
+# Checkout latest code
+git --work-tree="$WORK_TREE" --git-dir="$REPO_DIR" checkout -f
+
+
+
+cd "$WORK_TREE"
+
+
+if [ -f ".env" ]; then
+    echo "Not the first deploy..."
+else
+    echo "Detecting Ruby on Rails app, populating .env file..."
+    cat <<EOF > .env
+LANG=en_US.UTF-8
+RACK_ENV=production
+RAILS_ENV=production
+RAILS_LOG_TO_STDOUT=enabled
+POSTGRES_USER=$(random_postgres_user)
+POSTGRES_PASSWORD=$(random_postgres_password)
+POSTGRES_DB=$APP_NAME
+EOF
+fi
+
+
+echo "🐳 Building and restarting containers..."
+
+cp $DOCKER_FILES_DIR/RoR_3_4_8_Puma.Dockerfile $WORK_TREE/Dockerfile
+cp $DOCKER_FILES_DIR/ruby_on_rails_postgres.yml $WORK_TREE/docker-compose.yml
+docker compose --env-file .env up --build --force-recreate -d
+
+
+WEB_PORT=$(docker compose port web 3000 | cut -d: -f2)
+grep -q '^WEB_PORT=' .env 2>/dev/null || echo "WEB_PORT=$WEB_PORT" >> .env
+
+SUBDOMAIN=$(sanitize_subdomain "$APP_NAME")
+
+sed -i "/proxy_pass/c\proxy_pass http://localhost:$WEB_PORT;" /etc/nginx/sites-enabled/$SUBDOMAIN
+systemctl restart nginx
+echo "Applicating listening locally on: $WEB_PORT"
+
+URL=$(grep -oP 'server_name\s+\K[^;]+' /etc/nginx/sites-enabled/$SUBDOMAIN)
+
+echo "✅ Deployment complete, your app is available on: https://$URL"
+
