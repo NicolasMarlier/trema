@@ -5,10 +5,10 @@ Lightweight, host-your-own, heroku-like PaaS
 - [ ] TODO: write
 
 ### Improvement ideas
-- [ ] Trema config to set global address
+- [X] Trema config to set global address
 - [ ] More supported frameworks and ruby versions
 - [ ] Observablity
 - [ ] Automated DB snapshots
 
 ### Version
-0.1
+0.1.1

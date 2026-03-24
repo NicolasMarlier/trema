@@ -1,4 +1,6 @@
 #!/bin/bash
+source "$(dirname "$0")/trema-config"
+
 usage() {
     echo "Usage:
     trema logs
@@ -9,6 +11,8 @@ usage() {
     trema env
     trema load_pg_dump #pg_dump_file.sql
     trema heroku_pg_dump
+    trema config [--global|--help]
+    trema config:edit [--global]
 "
 }
 
@@ -55,11 +59,24 @@ EOF
     echo "✅ SSL configuration for $DOMAIN added"
 }
 init() {
+    if ! git rev-parse --git-dir > /dev/null 2>&1; then
+        echo "Error: not a git repository" >&2
+        exit 1
+    fi
+
     current_folder="${PWD##*/}"
 
+    load_global_config
+
+    read -p "Hostname [${TREMA_HOSTNAME:-}] (Press enter to keep default): " input_hostname
+    read -p "Username [${TREMA_USERNAME:-}] (Press enter to keep default): " input_username
+
+    [[ -n "$input_hostname" ]] && TREMA_HOSTNAME="$input_hostname"
+    [[ -n "$input_username" ]] && TREMA_USERNAME="$input_username"
+
     cat <<EOF > trema.env
-TREMA_HOSTNAME=nicolasm.fr
-TREMA_USERNAME=root
+TREMA_HOSTNAME=$TREMA_HOSTNAME
+TREMA_USERNAME=$TREMA_USERNAME
 TREMA_PROJECT_NAME=$current_folder
 EOF
     
@@ -145,6 +162,8 @@ env() {
 
 
 case "$1" in
+    config) config "$2" ;;
+    config:edit) config_edit_cmd "$2" ;;
     init) init ;;
     destroy) load_env; destroy ;;
     

@@ -1,0 +1,67 @@
+#!/bin/bash
+GLOBAL_CONFIG="$HOME/.trema_config"
+LOCAL_CONFIG="trema.env"
+
+load_global_config() {
+    if [[ -f "$GLOBAL_CONFIG" ]]; then
+        source "$GLOBAL_CONFIG"
+    else
+        echo "Tip: run 'trema config:edit --global' to set global defaults for hostname and username."
+    fi
+}
+
+config_help() {
+    echo "Usage:
+    trema config                  Display local config (trema.env)
+    trema config --global         Display global config (~/.trema_config)
+    trema config:edit             Edit local config (trema.env)
+    trema config:edit --global    Edit global config (~/.trema_config)
+    trema config --help           Show this help message
+"
+}
+
+config_show() {
+    if [[ "$1" == "--global" ]]; then
+        if [[ -f "$GLOBAL_CONFIG" ]]; then
+            echo "Global config ($GLOBAL_CONFIG):"
+            cat "$GLOBAL_CONFIG"
+        else
+            echo "No global config found. Run 'trema config:edit --global' to create one."
+        fi
+    else
+        if [[ -f "$LOCAL_CONFIG" ]]; then
+            echo "Local config ($LOCAL_CONFIG):"
+            cat "$LOCAL_CONFIG"
+        else
+            echo "No local config found. Run 'trema init' to create one."
+        fi
+    fi
+}
+
+config_edit() {
+    if [[ "$1" == "--global" ]]; then
+        mkdir -p "$(dirname "$GLOBAL_CONFIG")"
+        ${EDITOR:-vi} "$GLOBAL_CONFIG"
+    else
+        if [[ ! -f "$LOCAL_CONFIG" ]]; then
+            echo "No local config found. Run 'trema init' to create one." >&2
+            exit 1
+        fi
+        ${EDITOR:-vi} "$LOCAL_CONFIG"
+    fi
+}
+
+config() {
+    case "$1" in
+        --help) config_help ;;
+        --global) config_show --global ;;
+        *) config_show ;;
+    esac
+}
+
+config_edit_cmd() {
+    case "$1" in
+        --global) config_edit --global ;;
+        *) config_edit ;;
+    esac
+}
