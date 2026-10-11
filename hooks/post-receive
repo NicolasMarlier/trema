@@ -34,8 +34,20 @@ git --work-tree="$WORK_TREE" --git-dir="$REPO_DIR" checkout -f
 cd "$WORK_TREE"
 
 
+# An app shipping its own docker-compose.yml (with a `web` service listening on 3000)
+# is deployed as-is. Otherwise, fall back to the Rails + Postgres template.
+if git --git-dir="$REPO_DIR" cat-file -e HEAD:docker-compose.yml 2>/dev/null; then
+    CUSTOM_COMPOSE=1
+    echo "Detected app-provided docker-compose.yml"
+else
+    CUSTOM_COMPOSE=0
+fi
+
 if [ -f ".env" ]; then
     echo "Not the first deploy..."
+elif [ "$CUSTOM_COMPOSE" = "1" ]; then
+    echo "First deploy: creating .env from .env.example (edit it with 'trema env')..."
+    if [ -f ".env.example" ]; then cp .env.example .env; else touch .env; fi
 else
     echo "Detecting Ruby on Rails app, populating .env file..."
     cat <<EOF > .env
@@ -52,8 +64,10 @@ fi
 
 echo "🐳 Building and restarting containers..."
 
-cp $DOCKER_FILES_DIR/RoR_3_4_8_Puma.Dockerfile $WORK_TREE/Dockerfile
-cp $DOCKER_FILES_DIR/ruby_on_rails_postgres.yml $WORK_TREE/docker-compose.yml
+if [ "$CUSTOM_COMPOSE" = "0" ]; then
+    cp $DOCKER_FILES_DIR/RoR_3_4_8_Puma.Dockerfile $WORK_TREE/Dockerfile
+    cp $DOCKER_FILES_DIR/ruby_on_rails_postgres.yml $WORK_TREE/docker-compose.yml
+fi
 docker compose --env-file .env up --build --force-recreate -d
 
 
