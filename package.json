@@ -1,0 +1,6 @@
+{
+  "name": "trema",
+  "version": "0.1.1",
+  "private": true,
+  "scripts": { "test": "bash tests/run.sh" }
+}
