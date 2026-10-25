@@ -68,6 +68,17 @@ if [ "$CUSTOM_COMPOSE" = "0" ]; then
     cp $DOCKER_FILES_DIR/RoR_3_4_8_Puma.Dockerfile $WORK_TREE/Dockerfile
     cp $DOCKER_FILES_DIR/ruby_on_rails_postgres.yml $WORK_TREE/docker-compose.yml
 fi
+
+if [ "$CUSTOM_COMPOSE" = "0" ]; then
+    echo "🗄️  Running database migrations..."
+    if ! docker compose --env-file .env build \
+        || ! docker compose --env-file .env up -d --wait db \
+        || ! docker compose --env-file .env run --rm web bin/rails db:prepare; then
+        echo "❌ Migration failed, deployment aborted (previous version still running)."
+        exit 1
+    fi
+fi
+
 docker compose --env-file .env up --build --force-recreate -d
 
 
