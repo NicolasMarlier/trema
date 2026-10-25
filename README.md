@@ -18,3 +18,8 @@ Lightweight, host-your-own, heroku-like PaaS
 Pour les apps Rails (template Trema), `bin/rails db:prepare` est joué à chaque `git push trema main`, avant le redémarrage. Si la migration échoue, le déploiement s'arrête et l'ancienne version reste en ligne. `trema migrate` la relance à la main.
 
 Les apps déjà déployées doivent lancer `trema update` pour recevoir le nouveau hook.
+
+# Interface web (`trema ui`)
+Tableau de bord (apps, statut, logs, variables d'env, redémarrage, historique des déploiements).
+Installer sur le VM : `trema ui:install` (rsync + service systemd, redémarre au reboot, écoute sur 127.0.0.1:4000, sans dépendances). Ensuite `trema ui` ouvre le tunnel SSH et le navigateur. Le serveur refuse tout `Host` autre que localhost/127.0.0.1 et tout POST/PUT sans `Content-Type: application/json` + `X-Trema: 1`. Ne jamais l'exposer publiquement (accès au socket Docker et aux secrets).
+Le hook `post-receive` écrit `apps/<app>/deploys.log`.

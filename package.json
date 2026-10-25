@@ -2,7 +2,9 @@
   "name": "trema",
   "version": "0.1.2",
   "private": true,
+  "type": "module",
   "scripts": {
-    "test": "bash -n hooks/post-receive && bash -n bin/trema && bash -n bin/trema-config && bash tests/run.sh"
+    "start": "node ui/server.mjs",
+    "test": "bash -n hooks/post-receive && bash -n bin/trema && bash -n bin/trema-config && bash tests/run.sh && node --test test/*.test.mjs"
   }
 }
