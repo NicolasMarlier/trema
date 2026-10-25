@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>T-2 — Rotation des logs sur la VM Trema</title>
+<style>
+  :root{color-scheme:light}
+  *{box-sizing:border-box}
+  body{margin:0;font:15px/1.55 Inter,-apple-system,system-ui,sans-serif;background:#f4f1ea;color:#141517}
+  main{max-width:960px;margin:0 auto;padding:32px 22px 80px}
+  .kicker{letter-spacing:.25em;font-size:11px;text-transform:uppercase;color:#565b58}
+  h1{font-size:28px;margin:4px 0 6px}
+  h2{margin:36px 0 10px;font-size:19px;border-bottom:1px solid #d3cec1;padding-bottom:5px}
+  h3{font-size:15px;margin:18px 0 6px}
+  .mut{color:#565b58}
+  code,pre{font-family:ui-monospace,Menlo,monospace;font-size:13px}
+  code{background:#ebe7dd;padding:1px 5px;border-radius:4px}
+  pre{background:#141517;color:#f4f1ea;padding:12px 14px;border-radius:8px;overflow:auto;margin:8px 0}
+  pre .c{color:#9da1a5} pre .o{color:#f15a24} pre .g{color:#8fc08f}
+  table{border-collapse:collapse;width:100%;font-size:14px}
+  td,th{border-bottom:1px solid #d3cec1;padding:6px 8px;text-align:left;vertical-align:top}
+  th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#565b58}
+  .proto{border:1px solid #d3cec1;border-radius:12px;overflow:hidden;background:#fbf9f4}
+  .tb{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;padding:10px 12px;background:#ebe7dd;border-bottom:1px solid #d3cec1;font-size:12.5px}
+  .tb button{font:inherit;font-size:12.5px;border:1px solid #d3cec1;background:#fbf9f4;color:#141517;border-radius:6px;padding:3px 10px;cursor:pointer}
+  .tb button.on{background:#141517;color:#f4f1ea;border-color:#141517}
+  .tb label{display:flex;align-items:center;gap:6px}
+  .tb input[type=range]{accent-color:#f15a24;width:110px}
+  .tb b{min-width:44px;display:inline-block}
+  .legend{padding:10px 14px;font-size:12.5px;color:#565b58;border-top:1px solid #d3cec1}
+  .stats{display:flex;gap:10px;padding:12px 14px;flex-wrap:wrap}
+  .stat{flex:1;min-width:160px;border:1px solid #d3cec1;border-radius:8px;padding:8px 10px;background:#f4f1ea}
+  .stat .v{font-size:20px;font-weight:700}
+  .stat .l{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#565b58}
+  .bad{color:#b93d0d}.ok{color:#2f6b3a}
+  svg text{font:12px Inter,system-ui,sans-serif;fill:#141517}
+  svg .sm{font-size:10.5px;fill:#565b58}
+  svg .b{fill:#fbf9f4;stroke:#d3cec1;stroke-width:1.3}
+  svg .a{fill:#fbf9f4;stroke:#f15a24;stroke-width:1.4}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media (max-width:720px){.grid2{grid-template-columns:1fr}}
+  .card{border:1px solid #d3cec1;border-radius:10px;padding:12px 14px;background:#fbf9f4}
+  .card.reco{border-color:#f15a24}
+  .tag{display:inline-block;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;background:#f15a24;color:#141517;border-radius:99px;padding:0 8px;font-weight:700}
+  section[data-usine-q]{margin:14px 0}
+</style>
+</head>
+<body>
+<main>
+  <div class="kicker">Usine · trema · T-2 · Spec</div>
+  <h1>Rotation des logs sur la VM Trema</h1>
+  <p class="mut">La tâche n'a pas de description : j'interprète « cron log rotation » comme <b>empêcher les logs de remplir le disque de la VM</b>. Aujourd'hui les conteneurs (<code>web</code>, <code>db</code>) écrivent sur stdout (<code>RAILS_LOG_TO_STDOUT=enabled</code>) via le driver Docker <code>json-file</code> par défaut, <b>sans aucune limite</b> : les fichiers <code>/var/lib/docker/containers/*/*-json.log</code> grossissent jusqu'à saturer le disque, et toutes les apps tombent en même temps. S'y ajoutent les dumps de <code>/db_dumps</code>, qui s'accumulent eux aussi.</p>
+
+  <h2>Objectif</h2>
+  <ul>
+    <li>Plafonner l'espace disque occupé par les logs de chaque app (web + db), y compris les apps qui fournissent leur propre <code>docker-compose.yml</code>.</li>
+    <li><code>trema logs</code> doit continuer de fonctionner (<code>docker logs -f</code>) et garder un historique récent exploitable.</li>
+    <li>Ne rien demander à l'utilisateur : la rotation est active par défaut, avec des réglages raisonnables et surchargeables.</li>
+    <li>Installation idempotente sur la VM, via une commande Trema (pas d'intervention manuelle en SSH).</li>
+  </ul>
+
+  <h2>Approches possibles</h2>
+  <div class="grid2">
+    <div class="card reco">
+      <span class="tag">Recommandée</span>
+      <h3>A. Rotation native Docker (sans cron)</h3>
+      <p>Options du driver <code>json-file</code> : <code>max-size</code> / <code>max-file</code>. Posées <b>par défaut au niveau du démon</b> (<code>/etc/docker/daemon.json</code>) pour couvrir toutes les apps, et rappelées dans le template Rails.</p>
+      <p class="mut">+ Zéro processus à maintenir, rotation en continu, compatible <code>docker logs</code>.<br>− Appliqué seulement aux conteneurs recréés (OK : chaque déploiement fait <code>--force-recreate</code>). Modifier <code>daemon.json</code> impose un redémarrage de Docker, une seule fois.</p>
+    </div>
+    <div class="card">
+      <h3>B. Cron + logrotate</h3>
+      <p>Une règle <code>/etc/logrotate.d/trema</code> (<code>copytruncate</code>, compression, rétention N jours) sur les fichiers JSON de Docker, lancée par cron toutes les heures.</p>
+      <p class="mut">+ Rétention exprimée en jours, archives compressées.<br>− Docker ne voit plus les archives (<code>docker logs</code> n'affiche que le fichier courant), risque de perte de lignes à la troncature, entre deux passages un pic de logs peut encore remplir le disque.</p>
+    </div>
+  </div>
+  <p>Dans les deux cas, on ajoute un <b>cron quotidien de ménage</b> de <code>/db_dumps</code> (dumps de plus de N jours) et un <code>docker image prune</code> / <code>builder prune</code> optionnel — voir Q3.</p>
+
+  <h2>Simulateur : espace disque occupé</h2>
+  <div class="proto">
+    <div class="tb">
+      <label>Apps <input type="range" id="apps" min="1" max="15" value="4"><b id="appsV"></b></label>
+      <label>Logs / app / jour <input type="range" id="rate" min="5" max="1000" step="5" value="150"><b id="rateV"></b></label>
+      <label>Disque libre <input type="range" id="disk" min="5" max="200" step="5" value="40"><b id="diskV"></b></label>
+      <span>Stratégie :
+        <button data-s="none">aucune</button><button data-s="docker" class="on">A · Docker</button><button data-s="lr">B · logrotate</button>
+      </span>
+    </div>
+    <div class="tb" id="params"></div>
+    <svg id="chart" viewBox="0 0 900 260" width="100%"></svg>
+    <div class="stats" id="stats"></div>
+    <div class="legend">Estimation simplifiée : volume par conteneur, ratio de compression gzip ≈ 10 % pour logrotate. Les dumps ne sont pas comptés.</div>
+  </div>
+
+  <h2>Mise en place côté CLI</h2>
+  <p>Nouvelle commande <code>trema server:setup</code> (globale, n'a pas besoin de <code>trema.env</code> si <code>~/.trema_config</code> est renseigné), également appelée par <code>trema update</code>. Elle est idempotente.</p>
+<pre><span class="c">$</span> trema server:setup
+<span class="c">→ Connexion à</span> deploy@vm.example.com
+<span class="g">✅</span> /etc/docker/daemon.json : log-driver json-file, max-size=<span class="o">20m</span>, max-file=<span class="o">5</span>
+<span class="o">⚠</span>  Docker doit redémarrer pour appliquer la config (≈10 s d'interruption de toutes les apps).
+   Redémarrer maintenant ? [y/N] y
+<span class="g">✅</span> Docker redémarré, 4 apps relancées
+<span class="g">✅</span> Cron /etc/cron.d/trema-cleanup : dumps &gt; <span class="o">14</span> j supprimés chaque nuit à 03:30
+<span class="c">ℹ  Les limites s'appliquent aux conteneurs recréés : elles seront actives au prochain 'git push trema main'.</span>
+
+<span class="c">$</span> trema logs --tail 200      <span class="c"># nouveau : sans -f, ou historique limité</span></pre>
+
+  <h2>Workflow</h2>
+  <svg viewBox="0 0 900 200" width="100%">
+    <defs><marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#565b58"/></marker></defs>
+    <rect class="a" x="10" y="20" width="170" height="54" rx="8"/><text x="95" y="43" text-anchor="middle">trema server:setup</text><text class="sm" x="95" y="60" text-anchor="middle">(ou trema update)</text>
+    <rect class="b" x="240" y="20" width="190" height="54" rx="8"/><text x="335" y="43" text-anchor="middle">daemon.json</text><text class="sm" x="335" y="60" text-anchor="middle">max-size / max-file</text>
+    <rect class="b" x="240" y="120" width="190" height="54" rx="8"/><text x="335" y="143" text-anchor="middle">/etc/cron.d/trema-cleanup</text><text class="sm" x="335" y="160" text-anchor="middle">ménage /db_dumps (+ prune)</text>
+    <rect class="b" x="490" y="20" width="180" height="54" rx="8"/><text x="580" y="43" text-anchor="middle">git push trema main</text><text class="sm" x="580" y="60" text-anchor="middle">post-receive --force-recreate</text>
+    <rect class="a" x="720" y="20" width="170" height="54" rx="8"/><text x="805" y="43" text-anchor="middle">Conteneurs plafonnés</text><text class="sm" x="805" y="60" text-anchor="middle">≤ max-size × max-file</text>
+    <rect class="b" x="720" y="120" width="170" height="54" rx="8"/><text x="805" y="143" text-anchor="middle">trema logs</text><text class="sm" x="805" y="160" text-anchor="middle">docker logs (inchangé)</text>
+    <line x1="180" y1="47" x2="238" y2="47" stroke="#565b58" marker-end="url(#ar)"/>
+    <path d="M180,60 C210,90 210,147 238,147" fill="none" stroke="#565b58" marker-end="url(#ar)"/>
+    <line x1="430" y1="47" x2="488" y2="47" stroke="#565b58" marker-end="url(#ar)"/>
+    <line x1="670" y1="47" x2="718" y2="47" stroke="#565b58" marker-end="url(#ar)"/>
+    <line x1="805" y1="74" x2="805" y2="118" stroke="#565b58" marker-end="url(#ar)"/>
+  </svg>
+
+  <h2>Critères d'acceptation</h2>
+  <table>
+    <tr><th>Cas</th><th>Attendu</th></tr>
+    <tr><td>App Rails (template) redéployée</td><td><code>docker inspect</code> montre <code>max-size</code>/<code>max-file</code> ; le total des logs du conteneur ne dépasse pas la limite.</td></tr>
+    <tr><td>App avec son propre <code>docker-compose.yml</code></td><td>Même plafond appliqué via le défaut du démon (sauf si l'app définit son propre <code>logging:</code>).</td></tr>
+    <tr><td><code>trema server:setup</code> lancé deux fois</td><td>Aucun doublon (cron, clés JSON), pas de redémarrage Docker si rien n'a changé.</td></tr>
+    <tr><td><code>daemon.json</code> existant avec d'autres clés</td><td>Clés existantes conservées (fusion, pas d'écrasement).</td></tr>
+    <tr><td>Dumps de plus de N jours dans <code>/db_dumps</code></td><td>Supprimés par le cron nocturne ; les récents sont conservés.</td></tr>
+    <tr><td><code>trema logs</code></td><td>Affiche toujours le flux en direct et l'historique encore retenu.</td></tr>
+  </table>
+
+  <h2>Questions ouvertes</h2>
+
+  <section data-usine-q="Q1" data-kind="single" data-label="Interprétation : que doit couvrir « cron log rotation » ?" data-reco="a">
+    <div data-option="a">Logs des conteneurs Docker des apps (+ ménage annexe)</div>
+    <div data-option="b">Autre chose (logs nginx, logs d'un cron applicatif…) — à préciser en commentaire</div>
+  </section>
+  <p class="mut">Reco : <b>a</b> — c'est le seul log non borné aujourd'hui ; nginx est déjà géré par le logrotate de la distribution.</p>
+
+  <section data-usine-q="Q2" data-kind="single" data-label="Mécanisme de rotation ?" data-reco="a">
+    <div data-option="a">A · Rotation native Docker (daemon.json + template)</div>
+    <div data-option="b">B · Cron + logrotate sur les fichiers JSON</div>
+    <div data-option="c">A pour les conteneurs + cron uniquement pour le ménage</div>
+  </section>
+  <p class="mut">Reco : <b>a</b> (avec le cron de ménage de Q3 si retenu) — plus robuste, sans perte de lignes, compatible <code>docker logs</code>.</p>
+
+  <section data-usine-q="Q3" data-kind="multi" data-label="Ménage additionnel à faire par cron quotidien ?" data-reco="dumps">
+    <div data-option="dumps">Supprimer les dumps de /db_dumps au-delà de N jours</div>
+    <div data-option="images">docker image prune (images orphelines)</div>
+    <div data-option="builder">docker builder prune (cache de build)</div>
+  </section>
+  <p class="mut">Reco : <b>dumps</b> seulement — les prunes Docker ralentissent les builds suivants, à traiter dans une tâche à part si besoin.</p>
+
+  <section data-usine-q="Q4" data-kind="text" data-label="Limites par défaut (max-size × max-file, rétention des dumps) ?" data-reco="20m × 5 fichiers (100 Mo/conteneur), dumps conservés 14 jours">
+  </section>
+  <p class="mut">Reco : <b>20m × 5</b> (100 Mo max par conteneur), dumps <b>14 jours</b> — surchargeables via <code>~/.trema_config</code>.</p>
+
+  <section data-usine-q="Q5" data-kind="single" data-label="Redémarrage de Docker lors de l'installation ?" data-reco="a">
+    <div data-option="a">Demander confirmation (défaut : non, appliqué au prochain reboot / redémarrage manuel)</div>
+    <div data-option="b">Redémarrer automatiquement</div>
+    <div data-option="c">Ne pas toucher au démon : seulement le template Rails (les apps custom ne sont pas couvertes)</div>
+  </section>
+  <p class="mut">Reco : <b>a</b> — un redémarrage coupe toutes les apps quelques secondes, l'opérateur doit choisir le moment.</p>
+
+  <section data-usine-q="Q6" data-kind="single" data-label="Point d'entrée CLI ?" data-reco="a">
+    <div data-option="a">Nouvelle commande trema server:setup, appelée aussi par trema update</div>
+    <div data-option="b">Uniquement dans trema update</div>
+    <div data-option="c">Dans trema init (à chaque nouvelle app)</div>
+  </section>
+  <p class="mut">Reco : <b>a</b> — c'est une config de VM, pas d'app ; une commande dédiée prépare aussi le futur provisioning (README : installation à écrire).</p>
+
+  <section data-usine-q="Q7" data-kind="single" data-label="Ajouter l'option trema logs --tail N ?" data-reco="b">
+    <div data-option="a">Oui, dans cette tâche</div>
+    <div data-option="b">Non, hors périmètre</div>
+  </section>
+  <p class="mut">Reco : <b>b</b> — utile mais indépendant ; garder la PR petite.</p>
+</main>
+
+<script>
+(function(){
+  var S={s:"docker",ms:20,mf:5,days:7};
+  var $=function(id){return document.getElementById(id)};
+  function fmt(mb){return mb>=1024?(mb/1024).toFixed(1)+" Go":Math.round(mb)+" Mo"}
+  function params(){
+    var p=$("params");
+    if(S.s==="docker") p.innerHTML='<label>max-size <input type="range" id="ms" min="5" max="200" step="5" value="'+S.ms+'"><b>'+S.ms+'m</b></label><label>max-file <input type="range" id="mf" min="1" max="10" value="'+S.mf+'"><b>'+S.mf+'</b></label>';
+    else if(S.s==="lr") p.innerHTML='<label>Rétention <input type="range" id="days" min="1" max="30" value="'+S.days+'"><b>'+S.days+' j</b></label><span class="mut">cron horaire, gzip, copytruncate</span>';
+    else p.innerHTML='<span class="mut">Comportement actuel : json-file sans limite.</span>';
+    ["ms","mf","days"].forEach(function(k){var e=$(k);if(e)e.oninput=function(){S[k]=+e.value;params();draw()}});
+  }
+  function usage(d,apps,rate){
+    var c=apps*2, r=rate/2; // web+db, db logs moins
+    if(S.s==="none") return apps*rate*d*1.15;
+    if(S.s==="docker") return Math.min(apps*rate*d*1.15, c*S.ms*S.mf);
+    // logrotate : courant (≤ 1h) + archives compressées sur N jours
+    var keep=Math.min(d,S.days);
+    return apps*rate*1.15*(1/24 + keep*0.1);
+  }
+  function draw(){
+    var apps=+$("apps").value, rate=+$("rate").value, disk=+$("disk").value*1024;
+    $("appsV").textContent=apps; $("rateV").textContent=fmt(rate); $("diskV").textContent=fmt(disk);
+    var W=900,H=260,L=60,R=20,T=16,B=36,D=90;
+    var max=Math.max(disk*1.1, usage(D,apps,rate)*1.05, 1);
+    var x=function(d){return L+(W-L-R)*d/D}, y=function(v){return T+(H-T-B)*(1-Math.min(v,max)/max)};
+    var g='<rect x="0" y="0" width="900" height="260" fill="#fbf9f4"/>';
+    for(var i=0;i<=4;i++){var v=max*i/4;g+='<line x1="'+L+'" x2="'+(W-R)+'" y1="'+y(v)+'" y2="'+y(v)+'" stroke="#ebe7dd"/><text class="sm" x="'+(L-6)+'" y="'+(y(v)+4)+'" text-anchor="end">'+fmt(v)+'</text>'}
+    [0,30,60,90].forEach(function(d){g+='<text class="sm" x="'+x(d)+'" y="'+(H-14)+'" text-anchor="middle">J+'+d+'</text>'});
+    g+='<line x1="'+L+'" x2="'+(W-R)+'" y1="'+y(disk)+'" y2="'+y(disk)+'" stroke="#b93d0d" stroke-dasharray="5 4"/><text x="'+(W-R)+'" y="'+(y(disk)-6)+'" text-anchor="end" style="fill:#b93d0d;font-size:11px">disque plein</text>';
+    var cur=S.s; var pts=[],full=null;
+    for(var d=0;d<=D;d++){var u=usage(d,apps,rate);pts.push(x(d)+","+y(u));if(full===null&&u>=disk)full=d}
+    S.s="none";var ref=[];for(d=0;d<=D;d++)ref.push(x(d)+","+y(usage(d,apps,rate)));var refFull=null;for(d=0;d<=365*3;d++){if(usage(d,apps,rate)>=disk){refFull=d;break}}S.s=cur;
+    if(cur!=="none")g+='<polyline points="'+ref.join(" ")+'" fill="none" stroke="#9da1a5" stroke-dasharray="3 3" stroke-width="1.5"/>';
+    g+='<polyline points="'+pts.join(" ")+'" fill="none" stroke="#f15a24" stroke-width="2.5"/>';
+    if(full!==null)g+='<circle cx="'+x(full)+'" cy="'+y(disk)+'" r="5" fill="#b93d0d"/>';
+    $("chart").innerHTML=g;
+    var plateau=usage(365,apps,rate);
+    var hist = cur==="docker" ? (S.ms*S.mf/rate*24) : cur==="lr" ? null : null;
+    var st='<div class="stat"><div class="l">Sans rotation · disque plein</div><div class="v bad">'+(refFull===null?"&gt; 3 ans":"J+"+refFull)+'</div></div>';
+    st+='<div class="stat"><div class="l">Avec la stratégie · plafond</div><div class="v '+(cur==="none"?"bad":(plateau<disk?"ok":"bad"))+'">'+(cur==="none"?"aucun":fmt(plateau))+'</div></div>';
+    st+='<div class="stat"><div class="l">Historique visible dans trema logs</div><div class="v">'+(cur==="none"?"tout":cur==="docker"?(hist>=48?Math.round(hist/24)+" j":Math.max(1,Math.round(hist))+" h"):"≤ 1 h")+'</div></div>';
+    $("stats").innerHTML=st;
+  }
+  document.addEventListener("click",function(e){var t=e.target.closest("[data-s]");if(!t)return;S.s=t.dataset.s;t.parentNode.querySelectorAll("[data-s]").forEach(function(b){b.classList.toggle("on",b===t)});params();draw()});
+  ["apps","rate","disk"].forEach(function(k){$(k).oninput=draw});
+  params();draw();
+})();
+</script>
+</body>
+</html>
