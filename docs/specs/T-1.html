@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>T-1 — Run db:migrate on deploy (Rails only)</title>
+<style>
+  :root{--bg:#14161a;--panel:#1c1f25;--line:#2c313a;--text:#e8e6e1;--muted:#9aa0a8;--accent:#f28c28;--ok:#4caf7a;--ko:#e5534b;--info:#5aa9e6}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  header{border-bottom:3px solid var(--accent);padding:22px 32px;background:repeating-linear-gradient(135deg,#1a1c21 0 14px,#16181c 14px 28px)}
+  header .tag{font:600 12px/1 ui-monospace,Menlo,monospace;color:var(--accent);letter-spacing:.12em;text-transform:uppercase}
+  header h1{margin:6px 0 0;font-size:24px}
+  main{max-width:960px;margin:0 auto;padding:24px 32px 60px}
+  h2{font-size:17px;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);border-left:4px solid var(--accent);padding-left:10px;margin-top:36px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:16px 20px;margin:12px 0}
+  code,.mono{font-family:ui-monospace,Menlo,monospace;font-size:13px}
+  code{background:#262a31;padding:1px 5px;border-radius:3px}
+  table{border-collapse:collapse;width:100%;font-size:14px}
+  th,td{border-bottom:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+  th{color:var(--muted);font-weight:600}
+  .reco{color:var(--ok);font-weight:600}
+  .muted{color:var(--muted)}
+  .term{background:#0d0f12;border:1px solid var(--line);border-radius:6px;padding:14px;min-height:260px;white-space:pre-wrap;font-family:ui-monospace,Menlo,monospace;font-size:13px}
+  .term .ok{color:var(--ok)} .term .ko{color:var(--ko)} .term .info{color:var(--info)} .term .acc{color:var(--accent)}
+  .btns button{background:#262a31;color:var(--text);border:1px solid var(--line);border-radius:4px;padding:6px 12px;margin-right:6px;cursor:pointer;font:inherit;font-size:13px}
+  .btns button:hover{border-color:var(--accent)}
+  svg text{font-family:ui-monospace,Menlo,monospace}
+</style>
+</head>
+<body>
+<header>
+  <div class="tag">Usine · trema · T-1 · Spec</div>
+  <h1>Exécuter <code>db:migrate</code> à chaque déploiement (template Rails uniquement)</h1>
+</header>
+<main>
+
+<h2>Contexte</h2>
+<div class="card">
+  <p>Le hook <code>hooks/post-receive</code> déploie une app soit avec son propre <code>docker-compose.yml</code> (<em>custom</em>), soit avec le template <b>Rails + Postgres</b> (<code>RoR_3_4_8_Puma.Dockerfile</code> + <code>ruby_on_rails_postgres.yml</code>). Aujourd'hui, aucune migration n'est jouée : après un <code>git push trema main</code> contenant une migration, l'app démarre sur un schéma obsolète et il faut lancer <code>trema console</code> à la main.</p>
+  <p><b>Objectif :</b> lors d'un déploiement d'une app utilisant le template Rails (<code>CUSTOM_COMPOSE=0</code>), jouer les migrations automatiquement <b>avant</b> que la nouvelle version ne reçoive du trafic. Les apps custom ne sont pas concernées.</p>
+</div>
+
+<h2>Proposition (approche recommandée : C)</h2>
+<div class="card">
+  <ol>
+    <li><b>Build</b> l'image <code>web</code> (<code>docker compose build</code>).</li>
+    <li><b>Démarrer la base seule</b> et attendre qu'elle soit prête (healthcheck <code>pg_isready</code> ajouté au service <code>db</code> du template).</li>
+    <li><b>Migrer</b> dans un conteneur jetable : <code>docker compose run --rm web bin/rails db:prepare</code> (ou <code>db:migrate</code>, cf. Q1).</li>
+    <li>Si la migration échoue → <b>arrêt du déploiement</b>, l'ancien conteneur <code>web</code> continue de servir ; le log d'erreur s'affiche dans la sortie du <code>git push</code>.</li>
+    <li>Sinon → <code>docker compose up --force-recreate -d</code> comme aujourd'hui, puis nginx.</li>
+  </ol>
+  <p class="muted">Le bloc ne s'exécute que si <code>CUSTOM_COMPOSE=0</code>. Pas de nouvelle variable de config requise.</p>
+</div>
+
+<h2>Workflow de déploiement</h2>
+<div class="card">
+<svg viewBox="0 0 900 300" width="100%" role="img" aria-label="Workflow">
+  <defs><marker id="a" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10z" fill="#9aa0a8"/></marker></defs>
+  <g font-size="12" fill="#e8e6e1">
+    <rect x="10" y="30" width="120" height="44" rx="5" fill="#262a31" stroke="#2c313a"/><text x="70" y="57" text-anchor="middle">git push</text>
+    <rect x="160" y="30" width="130" height="44" rx="5" fill="#262a31" stroke="#2c313a"/><text x="225" y="50" text-anchor="middle">checkout +</text><text x="225" y="65" text-anchor="middle">.env</text>
+    <polygon points="370,22 440,52 370,82 300,52" fill="#262a31" stroke="#f28c28"/><text x="370" y="49" text-anchor="middle">compose</text><text x="370" y="63" text-anchor="middle">custom ?</text>
+    <rect x="480" y="30" width="120" height="44" rx="5" fill="#2a2116" stroke="#f28c28"/><text x="540" y="50" text-anchor="middle">build +</text><text x="540" y="65" text-anchor="middle">db healthy</text>
+    <rect x="630" y="30" width="120" height="44" rx="5" fill="#2a2116" stroke="#f28c28"/><text x="690" y="50" text-anchor="middle">run --rm web</text><text x="690" y="65" text-anchor="middle">db:prepare</text>
+    <polygon points="820,22 885,52 820,82 755,52" fill="#262a31" stroke="#f28c28"/><text x="820" y="56" text-anchor="middle">OK ?</text>
+    <rect x="740" y="150" width="150" height="44" rx="5" fill="#16271d" stroke="#4caf7a"/><text x="815" y="170" text-anchor="middle">up --force-recreate</text><text x="815" y="185" text-anchor="middle">+ nginx ✅</text>
+    <rect x="560" y="150" width="150" height="44" rx="5" fill="#2a1717" stroke="#e5534b"/><text x="635" y="170" text-anchor="middle">exit 1 ❌</text><text x="635" y="185" text-anchor="middle">ancien web conservé</text>
+    <rect x="300" y="150" width="140" height="44" rx="5" fill="#262a31" stroke="#2c313a"/><text x="370" y="170" text-anchor="middle">up --force-recreate</text><text x="370" y="185" text-anchor="middle">(inchangé)</text>
+    <text x="470" y="250" fill="#9aa0a8" font-size="11">Blocs orange = nouveaux (template Rails uniquement)</text>
+  </g>
+  <g stroke="#9aa0a8" fill="none" marker-end="url(#a)">
+    <path d="M130,52 H158"/><path d="M290,52 H298"/><path d="M440,52 H478"/><path d="M600,52 H628"/><path d="M750,52 H753"/>
+    <path d="M370,82 V148"/><path d="M820,82 V148"/><path d="M790,70 Q720,120 660,148"/>
+  </g>
+  <g font-size="11" fill="#9aa0a8"><text x="450" y="45">non (Rails)</text><text x="378" y="120">oui</text><text x="828" y="120">oui</text><text x="690" y="115">non</text></g>
+</svg>
+</div>
+
+<h2>Prototype — sortie du <code>git push trema main</code></h2>
+<div class="card">
+  <div class="btns">
+    <button onclick="play('ok')">▶ Déploiement avec migration OK</button>
+    <button onclick="play('ko')">▶ Migration en échec</button>
+    <button onclick="play('custom')">▶ App custom (non concernée)</button>
+  </div>
+  <div id="term" class="term" style="margin-top:12px"><span class="muted">Choisir un scénario…</span></div>
+</div>
+
+<h2>Approches envisagées</h2>
+<div class="card">
+<table>
+  <tr><th></th><th>Approche</th><th>Avantages</th><th>Limites</th></tr>
+  <tr><td>A</td><td><code>docker compose exec web rails db:migrate</code> après <code>up</code></td><td>2 lignes de shell</td><td>Nouvelle version déjà servie sur un vieux schéma ; échec = app cassée en ligne</td></tr>
+  <tr><td>B</td><td>Entrypoint du Dockerfile : <code>db:prepare &amp;&amp; puma</code></td><td>Aussi joué à <code>trema env</code> / restart ; standard Rails 7+</td><td>Échec = boucle de crash, ancien conteneur déjà détruit ; erreur visible seulement via <code>trema logs</code></td></tr>
+  <tr><td class="reco">C</td><td class="reco">Étape dédiée dans <code>post-receive</code> (<code>run --rm</code>) avant <code>up</code></td><td>Échec bloquant et visible dans le push ; ancienne version conservée</td><td>Healthcheck db à ajouter ; un peu plus de shell</td></tr>
+</table>
+</div>
+
+<h2>Hors périmètre</h2>
+<div class="card muted">Apps avec <code>docker-compose.yml</code> custom · rollback de migration · snapshot DB automatique avant migration (idée README séparée) · zero-downtime.</div>
+
+<h2>Questions ouvertes</h2>
+
+<section data-usine-q="Q1" data-kind="single" data-label="Quelle approche pour déclencher la migration ?" data-reco="c">
+  <div data-option="a">A — exec après up</div>
+  <div data-option="b">B — entrypoint du Dockerfile</div>
+  <div data-option="c">C — étape dédiée dans post-receive avant up (recommandé)</div>
+</section>
+
+<section data-usine-q="Q2" data-kind="single" data-label="Quelle tâche Rails lancer ?" data-reco="prepare">
+  <div data-option="prepare">bin/rails db:prepare (charge le schéma si base vide, sinon migre) — recommandé</div>
+  <div data-option="migrate">bin/rails db:migrate (strictement ce qui est demandé)</div>
+</section>
+
+<section data-usine-q="Q3" data-kind="single" data-label="En cas d'échec de migration ?" data-reco="abort">
+  <div data-option="abort">Stopper le déploiement, garder l'ancienne version en ligne (recommandé)</div>
+  <div data-option="continue">Afficher un warning et déployer quand même</div>
+</section>
+
+<section data-usine-q="Q4" data-kind="multi" data-label="Extras à inclure ?" data-reco="cmd">
+  <div data-option="cmd">Commande CLI « trema migrate » pour relancer à la main (recommandé, coût faible)</div>
+  <div data-option="skip">Opt-out via TREMA_SKIP_MIGRATE=1 dans .env</div>
+  <div data-option="env">Rejouer aussi les migrations lors de « trema env »</div>
+</section>
+
+<section data-usine-q="Q5" data-kind="text" data-label="Remarque : les apps déjà déployées n'ont le nouveau hook qu'après « trema update ». Faut-il le documenter dans le README / bumper la version ?" data-reco="Oui : mention dans le README + version 0.1.2">
+</section>
+
+</main>
+<script>
+const S={
+ ok:[["","Deployment will start..."],["","🚀 Deploying myapp..."],["","Not the first deploy..."],["acc","🔨 Building image..."],["acc","🐘 Starting db, waiting for healthy..."],["ok"," ✔ db healthy"],["acc","🗃  Running bin/rails db:prepare..."],["info","== 20250114 AddStatusToOrders: migrating ==="],["info","-- add_column(:orders, :status, :string)"],["info","== 20250114 AddStatusToOrders: migrated (0.0123s) ==="],["ok"," ✔ Migrations applied"],["","🔁 Restarting containers..."],["","Applicating listening locally on: 49153"],["ok","✅ Deployment complete, your app is available on: https://myapp.example.com"]],
+ ko:[["","Deployment will start..."],["","🚀 Deploying myapp..."],["acc","🔨 Building image..."],["acc","🐘 Starting db, waiting for healthy..."],["ok"," ✔ db healthy"],["acc","🗃  Running bin/rails db:prepare..."],["ko","ActiveRecord::StatementInvalid: PG::UndefinedColumn: column \"foo\" does not exist"],["ko","❌ Migration failed — deployment aborted."],["ko","   Previous version is still running. Fix and push again."],["muted","remote: error: hook declined (exit 1)"]],
+ custom:[["","Deployment will start..."],["","🚀 Deploying myapp..."],["","Detected app-provided docker-compose.yml"],["","🔨 Building and restarting containers..."],["muted","(no automatic migration for custom compose apps)"],["ok","✅ Deployment complete, your app is available on: https://myapp.example.com"]]
+};
+let timer;
+function play(k){clearInterval(timer);const t=document.getElementById('term');t.innerHTML='<span class="muted">$ git push trema main</span>\n';let i=0;
+ timer=setInterval(()=>{if(i>=S[k].length)return clearInterval(timer);const[c,l]=S[k][i++];const s=document.createElement('span');if(c)s.className=c;s.textContent='remote: '+l+'\n';t.appendChild(s)},280)}
+</script>
+</body>
+</html>

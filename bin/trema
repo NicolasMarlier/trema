@@ -3,12 +3,14 @@ source "$(dirname "$0")/trema-config"
 
 usage() {
     echo "Usage:
-    trema logs
+    trema logs [--tail N]
     trema ssh
     trema console
     trema init
+    trema server:setup
     trema destroy
     trema env
+    trema migrate
     trema ui
     trema ui:install
     trema load_pg_dump #pg_dump_file.sql
@@ -23,7 +25,17 @@ docker_container_name() {
 }
 
 logs() {
-    do_ssh "docker logs -f $(docker_container_name)"
+    local tail_opt=""
+    if [[ "$1" == "--tail" ]]; then
+        [[ "$2" =~ ^[0-9]+$ ]] || { echo "Usage: trema logs --tail N" >&2; exit 1; }
+        tail_opt="--tail $2"
+    fi
+    do_ssh "docker logs -f $tail_opt $(docker_container_name)"
+}
+
+server_setup() {
+    rsync -r "$(trema_path)/server" $TREMA_USERNAME@$TREMA_HOSTNAME:~/trema_server
+    do_ssh "sudo bash ~/trema_server/server/setup.sh"
 }
 
 do_ssh() {
@@ -126,7 +138,12 @@ trema_path() {
     
 update() {
     rsync -r $(trema_path)/docker_compose_files $TREMA_USERNAME@$TREMA_HOSTNAME:~
+    server_setup
     rsync -r $(trema_path)/hooks $TREMA_USERNAME@$TREMA_HOSTNAME:repos/$TREMA_PROJECT_NAME
+}
+
+migrate() {
+    do_ssh "cd apps/$TREMA_PROJECT_NAME && docker compose --env-file .env run --rm web bin/rails db:prepare"
 }
 
 sync_db() {
@@ -182,10 +199,12 @@ case "$1" in
     
     ssh) load_env; do_ssh ;;
     console) load_env; console ;;
-    logs) load_env; logs ;;  
+    logs) load_env; shift; logs "$@" ;;
+    server:setup) load_env; server_setup ;;  
     deploy) load_env; deploy ;;
     update) load_env; update ;;
     env) load_env; env ;;
+    migrate) load_env; migrate ;;
     ui) load_env; ui ;;
     ui:install) load_env; ui_install ;;
 
