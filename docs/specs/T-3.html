@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>T-3 — Interface web pour Trema</title>
+<style>
+  :root{color-scheme:light}
+  *{box-sizing:border-box}
+  body{margin:0;font:15px/1.55 Inter,-apple-system,system-ui,sans-serif;background:#f4f1ea;color:#141517}
+  main{max-width:980px;margin:0 auto;padding:32px 22px 80px}
+  .kicker{letter-spacing:.25em;font-size:11px;text-transform:uppercase;color:#565b58}
+  h1{font-size:28px;margin:4px 0 6px}
+  h2{margin:36px 0 10px;font-size:19px;border-bottom:1px solid #d3cec1;padding-bottom:5px}
+  .mut{color:#565b58}
+  code{font-family:ui-monospace,Menlo,monospace;font-size:13px;background:#ebe7dd;padding:1px 5px;border-radius:4px}
+  table{border-collapse:collapse;width:100%;font-size:14px}
+  td,th{border-bottom:1px solid #d3cec1;padding:6px 8px;text-align:left;vertical-align:top}
+  th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#565b58}
+  .note{border-left:3px solid #f15a24;background:#fbf9f4;padding:10px 14px;border-radius:0 8px 8px 0;margin:14px 0}
+  .proto{border:1px solid #d3cec1;border-radius:12px;overflow:hidden;background:#fbf9f4}
+  .tb{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 12px;background:#ebe7dd;border-bottom:1px solid #d3cec1;font-size:12.5px}
+  .tb button{font:inherit;font-size:12.5px;border:1px solid #d3cec1;background:#fbf9f4;color:#141517;border-radius:6px;padding:3px 10px;cursor:pointer}
+  .tb button.on{background:#141517;color:#f4f1ea;border-color:#141517}
+  .legend{padding:10px 14px;font-size:12.5px;color:#565b58;border-top:1px solid #d3cec1}
+
+  /* ---- prototype Trema ---- */
+  .app{--bg:#f4f1ea;--panel:#fbf9f4;--panel2:#ebe7dd;--line:#d3cec1;--txt:#141517;--mut:#565b58;--acc:#b93d0d;--brand:#f15a24;--ok:#3d8b5a;--ko:#c0392b;
+       background:var(--bg);color:var(--txt);display:flex;font-size:13px;height:470px}
+  .app.dark{--bg:#141517;--panel:#1b1c1f;--panel2:#25272b;--line:#34373b;--txt:#f4f1ea;--mut:#9da1a5;--acc:#f15a24;--ok:#5fbf80;--ko:#e8705f}
+  .app aside{width:220px;flex:none;border-right:1px solid var(--line);background:var(--panel);padding:12px;display:flex;flex-direction:column;gap:2px}
+  .logo{font-weight:700;font-size:17px;color:var(--acc);padding:0 8px;margin-bottom:2px}
+  .host{font-size:11px;color:var(--mut);padding:0 8px;margin-bottom:12px;font-family:ui-monospace,Menlo,monospace}
+  .sec{margin:12px 0 4px;padding:0 10px;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--mut)}
+  .nav{display:flex;align-items:center;gap:8px;padding:5px 10px;border-radius:6px;color:var(--mut);cursor:pointer}
+  .nav:hover,.nav.on{background:var(--panel2);color:var(--txt)}
+  .dot{width:8px;height:8px;border-radius:50%;flex:none}
+  .dot.up{background:var(--ok)} .dot.down{background:var(--ko)} .dot.build{background:var(--brand);animation:pulse 1.2s infinite}
+  @keyframes pulse{0%,100%{opacity:.3}50%{opacity:1}}
+  .res{margin-top:auto;font-size:11px;color:var(--mut);padding:0 8px}
+  .bar{height:5px;background:var(--panel2);border-radius:3px;margin:3px 0 8px;overflow:hidden}
+  .bar i{display:block;height:100%;background:var(--brand)}
+  .content{flex:1;display:flex;flex-direction:column;min-width:0}
+  .head{padding:14px 18px 0;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .head h3{margin:0;font-size:18px}
+  .head a{color:var(--acc);font-size:12px;text-decoration:none}
+  .head .act{margin-left:auto;display:flex;gap:6px}
+  .btn{font:inherit;font-size:12px;border:1px solid var(--line);background:var(--panel);color:var(--txt);border-radius:6px;padding:4px 10px;cursor:pointer}
+  .btn.pri{background:var(--brand);border-color:var(--brand);color:#141517;font-weight:600}
+  .btn.dng{color:var(--ko)}
+  .tabs{display:flex;gap:2px;padding:10px 18px 0;border-bottom:1px solid var(--line)}
+  .tab{padding:6px 12px;cursor:pointer;color:var(--mut);border-bottom:2px solid transparent;margin-bottom:-1px}
+  .tab.on{color:var(--txt);border-color:var(--brand)}
+  .pane{flex:1;overflow:auto;padding:14px 18px}
+  .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+  .card b{display:block;font-size:17px;margin-top:2px}
+  .card small{color:var(--mut);font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+  .log{background:#141517;color:#d8d4c9;font:12px/1.5 ui-monospace,Menlo,monospace;border-radius:8px;padding:10px 12px;height:100%;overflow:auto;white-space:pre-wrap}
+  .log .w{color:#f15a24}
+  .kv{width:100%;border-collapse:collapse;font:12px ui-monospace,Menlo,monospace}
+  .kv td{border-bottom:1px solid var(--line);padding:5px 6px}
+  .kv input{font:inherit;width:100%;background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:4px;padding:3px 6px}
+  .dep td,.dep th{border-bottom:1px solid var(--line);color:var(--txt)}
+  .dep th{color:var(--mut)}
+  .pill{font-size:11px;border-radius:99px;padding:1px 8px;font-weight:600}
+  .pill.ok{background:color-mix(in srgb,var(--ok) 20%,transparent);color:var(--ok)}
+  .pill.ko{background:color-mix(in srgb,var(--ko) 20%,transparent);color:var(--ko)}
+  .pill.run{background:color-mix(in srgb,var(--brand) 20%,transparent);color:var(--acc)}
+  .toast{position:absolute;right:16px;bottom:14px;background:var(--txt);color:var(--bg);padding:6px 12px;border-radius:6px;font-size:12px;opacity:0;transition:opacity .2s}
+  .toast.show{opacity:1}
+
+  .tui{background:#141517;color:#d8d4c9;font:12.5px/1.45 ui-monospace,Menlo,monospace;padding:14px;border-radius:10px;white-space:pre;overflow:auto}
+  .tui .o{color:#f15a24}.tui .g{color:#5fbf80}.tui .r{color:#e8705f}.tui .m{color:#9da1a5}
+
+  svg.flow text{font:12px Inter,system-ui,sans-serif;fill:#141517}
+  svg.flow .sm{font-size:10.5px;fill:#565b58}
+  svg.flow .b{fill:#fbf9f4;stroke:#d3cec1;stroke-width:1.3}
+  svg.flow .a{fill:#fbf9f4;stroke:#f15a24;stroke-width:1.5}
+  svg.flow .z{fill:none;stroke:#d3cec1;stroke-dasharray:4 4}
+  section[data-usine-q]{margin:14px 0}
+</style>
+</head>
+<body>
+<main>
+  <div class="kicker">Usine · trema · T-3 · Spec</div>
+  <h1>Une interface pour piloter Trema</h1>
+  <p class="mut">La tâche n'a pas de description. Trema est aujourd'hui un CLI bash (<code>trema init / logs / env / console / destroy…</code>) + un hook <code>post-receive</code> qui déploie via Docker Compose et nginx sur un VM. Je fais l'hypothèse que « Interface » = <b>un tableau de bord web</b> pour voir et opérer les apps hébergées, sans SSH. Une alternative TUI est proposée en question Q1.</p>
+
+  <h2>Objectif</h2>
+  <ul>
+    <li>Voir d'un coup d'œil toutes les apps du serveur : statut des conteneurs, URL, dernier déploiement, ressources.</li>
+    <li>Faire depuis le navigateur ce qui nécessite aujourd'hui <code>trema …</code> + SSH : logs en direct, édition des variables d'env + redéploiement, redémarrage, dumps DB.</li>
+    <li>Garder l'esprit « léger, auto-hébergé » : un seul conteneur de plus sur le VM, pas de base de données propre (l'état est lu depuis <code>~/apps</code>, <code>~/repos</code>, Docker et nginx).</li>
+  </ul>
+
+  <h2>Prototype</h2>
+  <div class="proto">
+    <div class="tb">
+      <button data-x="dark">Thème sombre</button>
+      <button data-x="redeploy">Simuler un git push sur « blog »</button>
+    </div>
+    <div class="app" id="app" style="position:relative">
+      <aside>
+        <div class="logo">▲ Trema</div>
+        <div class="host">deploy@vm.example.com</div>
+        <div class="sec">Apps</div>
+        <div id="apps"></div>
+        <div class="res">
+          CPU 23 %<div class="bar"><i style="width:23%"></i></div>
+          RAM 2,1 / 4 Go<div class="bar"><i style="width:52%"></i></div>
+          Disque 18 / 40 Go<div class="bar"><i style="width:45%"></i></div>
+        </div>
+      </aside>
+      <div class="content">
+        <div class="head" id="head"></div>
+        <div class="tabs" id="tabs"></div>
+        <div class="pane" id="pane"></div>
+      </div>
+      <div class="toast" id="toast"></div>
+    </div>
+    <div class="legend">Cliquez sur une app, puis naviguez entre les onglets. Les logs défilent en direct ; l'onglet Env permet de modifier une valeur puis « Enregistrer &amp; redéployer ».</div>
+  </div>
+
+  <div data-when="Q1=b">
+    <h3>Variante TUI (si Q1 = b)</h3>
+    <div class="tui"><span class="o">▲ trema</span> <span class="m">deploy@vm.example.com</span>                         <span class="m">[↑↓] app  [l]ogs  [e]nv  [r]estart  [q]uit</span>
+<span class="m">──────────────────────────────────────────────────────────────────────────────</span>
+  APP            STATUT     URL                              DÉPLOYÉ
+<span class="o">▸</span> blog           <span class="g">● up</span>       https://blog.vm.example.com      il y a 2 h   a1c3f9e
+  shop-api       <span class="g">● up</span>       https://shop-api.vm.example.com  il y a 3 j   7be012d
+  side-project   <span class="r">● down</span>     https://side-project.vm…         il y a 12 j  09ff1aa
+<span class="m">──────────────────────────────────────────────────────────────────────────────</span>
+<span class="m">blog-web-1 |</span> Puma starting in single mode...
+<span class="m">blog-web-1 |</span> * Listening on http://0.0.0.0:3000</div>
+  </div>
+
+  <h2>Architecture</h2>
+  <svg class="flow" viewBox="0 0 900 230" width="100%">
+    <defs><marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#565b58"/></marker></defs>
+    <rect class="z" x="250" y="10" width="640" height="210" rx="12"/>
+    <text class="sm" x="262" y="28">VM Trema</text>
+    <rect class="b" x="10" y="85" width="160" height="56" rx="8"/><text x="90" y="108" text-anchor="middle">Navigateur</text><text class="sm" x="90" y="125" text-anchor="middle">via tunnel SSH ou HTTPS</text>
+    <rect class="b" x="275" y="85" width="120" height="56" rx="8"/><text x="335" y="108" text-anchor="middle">nginx</text><text class="sm" x="335" y="125" text-anchor="middle">trema.&lt;host&gt; (opt.)</text>
+    <rect class="a" x="450" y="80" width="170" height="66" rx="8"/><text x="535" y="104" text-anchor="middle">trema-ui</text><text class="sm" x="535" y="120" text-anchor="middle">API Hono + front React</text><text class="sm" x="535" y="135" text-anchor="middle">1 conteneur, sans BDD</text>
+    <rect class="b" x="690" y="30" width="180" height="40" rx="8"/><text x="780" y="55" text-anchor="middle">Docker socket</text>
+    <rect class="b" x="690" y="80" width="180" height="40" rx="8"/><text x="780" y="105" text-anchor="middle">~/apps · ~/repos (.env)</text>
+    <rect class="b" x="690" y="130" width="180" height="40" rx="8"/><text x="780" y="155" text-anchor="middle">nginx sites-enabled</text>
+    <rect class="b" x="690" y="180" width="180" height="32" rx="8"/><text x="780" y="201" text-anchor="middle">deploys.log (hook)</text>
+    <line x1="170" y1="113" x2="273" y2="113" stroke="#565b58" marker-end="url(#ar)"/>
+    <line x1="395" y1="113" x2="448" y2="113" stroke="#565b58" marker-end="url(#ar)"/>
+    <line x1="620" y1="100" x2="688" y2="50" stroke="#565b58" marker-end="url(#ar)"/>
+    <line x1="620" y1="110" x2="688" y2="100" stroke="#565b58" marker-end="url(#ar)"/>
+    <line x1="620" y1="122" x2="688" y2="150" stroke="#565b58" marker-end="url(#ar)"/>
+    <line x1="620" y1="135" x2="688" y2="196" stroke="#565b58" marker-end="url(#ar)"/>
+  </svg>
+  <ul>
+    <li><b>trema-ui</b> : petit service (Hono + React/Vite, conforme à la stack) déployé sur le VM par une nouvelle commande <code>trema ui:install</code>.</li>
+    <li>Lecture d'état : Docker (statut, stats, logs en streaming SSE), fichiers <code>~/apps/&lt;app&gt;/.env</code>, configs nginx pour l'URL.</li>
+    <li>Historique des déploiements : le hook <code>post-receive</code> ajoute une ligne (date, commit, durée, résultat) dans un fichier <code>deploys.log</code> par app — seul changement au flux existant.</li>
+    <li>Actions : réutilisent les mêmes opérations que le CLI (<code>docker compose up --build --force-recreate</code>, <code>pg_dump</code>…), pour qu'il n'y ait qu'une seule façon de faire.</li>
+  </ul>
+
+  <h2>Flux « modifier une variable d'env »</h2>
+  <svg class="flow" viewBox="0 0 900 90" width="100%">
+    <defs><marker id="ar2" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#565b58"/></marker></defs>
+    <rect class="b" x="10" y="20" width="150" height="50" rx="8"/><text x="85" y="42" text-anchor="middle">Onglet Env</text><text class="sm" x="85" y="58" text-anchor="middle">édite / ajoute</text>
+    <rect class="b" x="190" y="20" width="150" height="50" rx="8"/><text x="265" y="42" text-anchor="middle">Confirmation</text><text class="sm" x="265" y="58" text-anchor="middle">diff des clés</text>
+    <rect class="a" x="370" y="20" width="160" height="50" rx="8"/><text x="450" y="42" text-anchor="middle">Écrit .env</text><text class="sm" x="450" y="58" text-anchor="middle">+ sauvegarde .env.bak</text>
+    <rect class="b" x="560" y="20" width="160" height="50" rx="8"/><text x="640" y="42" text-anchor="middle">compose up --build</text><text class="sm" x="640" y="58" text-anchor="middle">logs streamés</text>
+    <rect class="b" x="750" y="20" width="140" height="50" rx="8"/><text x="820" y="42" text-anchor="middle">Statut ● up</text><text class="sm" x="820" y="58" text-anchor="middle">ou erreur affichée</text>
+    <line x1="160" y1="45" x2="188" y2="45" stroke="#565b58" marker-end="url(#ar2)"/>
+    <line x1="340" y1="45" x2="368" y2="45" stroke="#565b58" marker-end="url(#ar2)"/>
+    <line x1="530" y1="45" x2="558" y2="45" stroke="#565b58" marker-end="url(#ar2)"/>
+    <line x1="720" y1="45" x2="748" y2="45" stroke="#565b58" marker-end="url(#ar2)"/>
+  </svg>
+
+  <h2>Hors périmètre (V1)</h2>
+  <ul class="mut">
+    <li>Création d'app depuis l'UI (<code>trema init</code> reste côté CLI : il touche au repo git local).</li>
+    <li>Multi-utilisateurs / rôles, multi-serveurs.</li>
+    <li>Métriques historisées (graphes) — cf. l'idée « Observability » du README.</li>
+  </ul>
+
+  <div class="note"><b>Sécurité :</b> l'UI a accès au socket Docker et aux secrets <code>.env</code> = équivalent root sur le VM. D'où la recommandation de ne pas l'exposer publiquement par défaut (Q2).</div>
+
+  <h2>Questions ouvertes</h2>
+
+  <section data-usine-q="Q1" data-kind="single" data-label="Quel type d'interface ?" data-reco="a">
+    <div data-option="a">Tableau de bord web hébergé sur le VM</div>
+    <div data-option="b">TUI dans le terminal (commande <code>trema ui</code>, pas de service serveur)</div>
+    <div data-option="c">Autre chose (ex. refonte de l'interface CLI) — préciser en commentaire</div>
+  </section>
+  <p class="mut">Reco : <b>a</b> — c'est l'esprit « heroku-like » ; la TUI est plus simple mais moins partageable.</p>
+
+  <section data-usine-q="Q2" data-kind="single" data-label="Comment accède-t-on à l'interface ?" data-reco="a">
+    <div data-option="a">Tunnel SSH : <code>trema ui</code> ouvre <code>ssh -L</code> + le navigateur (rien d'exposé)</div>
+    <div data-option="b">Sous-domaine HTTPS <code>trema.&lt;host&gt;</code> protégé par mot de passe</div>
+    <div data-option="c">Les deux (tunnel par défaut, exposition optionnelle)</div>
+  </section>
+  <p class="mut">Reco : <b>a</b> — réutilise l'auth SSH existante, zéro surface d'attaque ajoutée.</p>
+
+  <section data-usine-q="Q3" data-kind="multi" data-label="Périmètre de la V1 ?" data-reco="status,logs,env,restart,deploys">
+    <div data-option="status">Liste des apps + statut + ressources</div>
+    <div data-option="logs">Logs en direct</div>
+    <div data-option="env">Édition des variables d'env + redéploiement</div>
+    <div data-option="restart">Redémarrer / arrêter une app</div>
+    <div data-option="deploys">Historique des déploiements (modif. du hook)</div>
+    <div data-option="db">Dumps DB (télécharger / restaurer)</div>
+    <div data-option="destroy">Suppression d'app</div>
+    <div data-option="console">Console web (shell dans le conteneur)</div>
+  </section>
+  <p class="mut">Reco : les 5 premiers. DB, suppression et console sont plus risqués / coûteux → V2.</p>
+
+  <section data-usine-q="Q4" data-kind="single" data-label="Afficher les valeurs des variables d'env en clair ?" data-reco="b">
+    <div data-option="a">Oui, en clair</div>
+    <div data-option="b">Masquées par défaut, révélées au clic</div>
+  </section>
+  <p class="mut">Reco : <b>b</b> — évite les fuites par partage d'écran.</p>
+
+  <section data-usine-q="Q5" data-kind="single" data-label="Identité visuelle de l'interface Trema ?" data-reco="a">
+    <div data-option="a">Reprendre la palette Usine (comme le prototype)</div>
+    <div data-option="b">Identité propre à Trema (à définir)</div>
+  </section>
+  <p class="mut">Reco : <b>a</b> — cohérence entre outils perso, rien à concevoir.</p>
+
+  <section data-usine-q="Q6" data-kind="text" data-label="Précisions sur ce que « Interface » devait couvrir (si mon hypothèse est fausse) ?" data-reco="RAS, l'hypothèse tableau de bord web est la bonne">
+  </section>
+</main>
+
+<script>
+(function(){
+  var S={dark:false,sel:"blog",tab:"overview",reveal:{}};
+  var apps={
+    blog:{st:"up",url:"blog.vm.example.com",kind:"Rails + Postgres (template)",cpu:"4 %",mem:"310 Mo",port:32768,
+      env:[["RAILS_ENV","production"],["POSTGRES_USER","xKqLmPtRaz"],["POSTGRES_PASSWORD","hJeWbnQoTy"],["SECRET_KEY_BASE","9f2c…e81"]],
+      dep:[["il y a 2 h","a1c3f9e","fix: typo footer","48 s","ok"],["hier","5d02b7c","feat: rss","52 s","ok"],["il y a 4 j","c91aa30","chore: bump rails","—","ko"]]},
+    "shop-api":{st:"up",url:"shop-api.vm.example.com",kind:"docker-compose.yml fourni",cpu:"11 %",mem:"540 Mo",port:32771,
+      env:[["NODE_ENV","production"],["DATABASE_URL","postgres://…"],["STRIPE_KEY","sk_live_…"]],
+      dep:[["il y a 3 j","7be012d","feat: webhooks","1 min 10","ok"]]},
+    "side-project":{st:"down",url:"side-project.vm.example.com",kind:"Rails + Postgres (template)",cpu:"—",mem:"—",port:32775,
+      env:[["RAILS_ENV","production"]],
+      dep:[["il y a 12 j","09ff1aa","wip","39 s","ok"]]}
+  };
+  var logLines=["Started GET \"/\" for 10.0.0.1","Processing by PostsController#index as HTML","  Rendered posts/index.html.erb (12.4ms)","Completed 200 OK in 31ms","Started GET \"/feed.xml\" for 10.0.0.7","Completed 200 OK in 8ms","<w>W, Slow query (412ms) SELECT * FROM posts</w>"];
+  var logBuf=[],logTimer=null;
+  var $=function(id){return document.getElementById(id)};
+  function toast(m){var t=$("toast");t.textContent=m;t.classList.add("show");setTimeout(function(){t.classList.remove("show")},1800)}
+  function label(st){return st==="up"?"● en ligne":st==="down"?"● arrêtée":"● déploiement…"}
+  function render(){
+    $("app").classList.toggle("dark",S.dark);
+    var h="";Object.keys(apps).forEach(function(k){h+='<div class="nav'+(k===S.sel?" on":"")+'" data-app="'+k+'"><span class="dot '+apps[k].st+'"></span>'+k+'</div>'});
+    $("apps").innerHTML=h;
+    var a=apps[S.sel];
+    $("head").innerHTML='<h3>'+S.sel+'</h3><span class="pill '+(a.st==="up"?"ok":a.st==="down"?"ko":"run")+'">'+label(a.st)+'</span><a href="#" onclick="return false">https://'+a.url+' ↗</a>'+
+      '<span class="act"><button class="btn" data-do="restart">'+(a.st==="down"?"Démarrer":"Redémarrer")+'</button>'+(a.st!=="down"?'<button class="btn dng" data-do="stop">Arrêter</button>':'')+'</span>';
+    var tabs=[["overview","Vue d'ensemble"],["logs","Logs"],["env","Env"],["deploys","Déploiements"]];
+    $("tabs").innerHTML=tabs.map(function(t){return '<div class="tab'+(t[0]===S.tab?" on":"")+'" data-tab="'+t[0]+'">'+t[1]+'</div>'}).join("");
+    clearInterval(logTimer);
+    var p=$("pane");
+    if(S.tab==="overview"){
+      var d=a.dep[0];
+      p.innerHTML='<div class="cards"><div class="card"><small>Dernier déploiement</small><b>'+d[0]+'</b><span style="color:var(--mut)">'+d[1]+' · '+d[2]+'</span></div>'+
+        '<div class="card"><small>CPU / RAM</small><b>'+a.cpu+' · '+a.mem+'</b><span style="color:var(--mut)">conteneur web</span></div>'+
+        '<div class="card"><small>Type</small><b style="font-size:14px">'+a.kind+'</b><span style="color:var(--mut)">port local '+a.port+'</span></div></div>'+
+        '<p style="color:var(--mut);margin-top:16px">Conteneurs : <code>'+S.sel+'-web-1</code> '+(a.kind.indexOf("Postgres")>0?'· <code>'+S.sel+'-db-1</code>':'')+'</p>'+
+        '<p style="color:var(--mut)">Déployer : <code>git push trema main</code></p>';
+    } else if(S.tab==="logs"){
+      if(a.st==="down"){p.innerHTML='<div class="log">Conteneur arrêté — aucun log en direct.</div>';return}
+      if(!logBuf.length)logBuf=logLines.slice(0,4);
+      p.innerHTML='<div class="log" id="log"></div>';
+      var paint=function(){var el=$("log");if(!el)return;el.innerHTML=logBuf.map(function(l){return S.sel+'-web-1 | '+l.replace("<w>",'<span class="w">').replace("</w>","</span>")}).join("\n");el.scrollTop=1e6};
+      paint();
+      logTimer=setInterval(function(){logBuf.push(logLines[Math.floor(Math.random()*logLines.length)]);if(logBuf.length>60)logBuf.shift();paint()},900);
+    } else if(S.tab==="env"){
+      var r=a.env.map(function(e,i){var shown=S.reveal[S.sel+i];return '<tr><td style="width:38%">'+e[0]+'</td><td>'+(shown?'<input data-env="'+i+'" value="'+e[1]+'">':'<span style="color:var(--mut)">••••••••</span>')+'</td><td style="width:60px"><button class="btn" data-rev="'+i+'">'+(shown?"Masquer":"Voir")+'</button></td></tr>'}).join("");
+      p.innerHTML='<table class="kv">'+r+'</table><div style="display:flex;gap:6px;margin-top:12px"><button class="btn">+ Ajouter</button><span style="flex:1"></span><button class="btn pri" data-do="save">Enregistrer &amp; redéployer</button></div>';
+    } else {
+      p.innerHTML='<table class="kv dep"><tr><th>Quand</th><th>Commit</th><th>Message</th><th>Durée</th><th>Résultat</th></tr>'+
+        a.dep.map(function(d){return '<tr><td>'+d[0]+'</td><td>'+d[1]+'</td><td>'+d[2]+'</td><td>'+d[3]+'</td><td>'+(d[4]==="ok"?'<span class="pill ok">réussi</span>':d[4]==="run"?'<span class="pill run">en cours</span>':'<span class="pill ko">échec</span>')+'</td></tr>'}).join("")+'</table>';
+    }
+  }
+  function deploy(k,msg){
+    var a=apps[k];a.st="build";render();
+    setTimeout(function(){a.st="up";if(a.dep[0][4]==="run"){a.dep[0]=["à l'instant",a.dep[0][1],a.dep[0][2],"45 s","ok"]}render();toast("✅ "+k+" "+msg)},2500);
+  }
+  document.addEventListener("click",function(e){
+    var t=e.target.closest("[data-app],[data-tab],[data-do],[data-rev],.tb button");if(!t)return;
+    if(t.dataset.app){S.sel=t.dataset.app;logBuf=[];}
+    else if(t.dataset.tab){S.tab=t.dataset.tab;}
+    else if(t.dataset.rev){var k=S.sel+t.dataset.rev;S.reveal[k]=!S.reveal[k];}
+    else if(t.dataset.do==="save"){
+      document.querySelectorAll("[data-env]").forEach(function(i){apps[S.sel].env[+i.dataset.env][1]=i.value});
+      if(!confirm("Écrire .env et redéployer "+S.sel+" ?"))return;
+      deploy(S.sel,"redéployée avec la nouvelle config");return;
+    }
+    else if(t.dataset.do==="stop"){apps[S.sel].st="down";toast("⏹ "+S.sel+" arrêtée");}
+    else if(t.dataset.do==="restart"){deploy(S.sel,"redémarrée");return;}
+    else if(t.dataset.x==="dark"){S.dark=!S.dark;t.classList.toggle("on",S.dark);}
+    else if(t.dataset.x==="redeploy"){apps.blog.dep.unshift(["à l'instant","e44b81d","feat: dark mode","…","run"]);deploy("blog","déployée (e44b81d)");return;}
+    else return;
+    render();
+  });
+  render();
+})();
+</script>
+</body>
+</html>
