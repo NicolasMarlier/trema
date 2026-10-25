@@ -10,6 +10,7 @@ usage() {
     trema server:setup
     trema destroy
     trema env
+    trema migrate
     trema load_pg_dump #pg_dump_file.sql
     trema heroku_pg_dump
     trema config [--global|--help]
@@ -139,6 +140,10 @@ update() {
     rsync -r $(trema_path)/hooks $TREMA_USERNAME@$TREMA_HOSTNAME:repos/$TREMA_PROJECT_NAME
 }
 
+migrate() {
+    do_ssh "cd apps/$TREMA_PROJECT_NAME && docker compose --env-file .env run --rm web bin/rails db:prepare"
+}
+
 sync_db() {
     PG_DUMP_FILE_PATH=$1
     echo "Will load $PG_DUMP_FILE_PATH file DB..."
@@ -186,6 +191,7 @@ case "$1" in
     deploy) load_env; deploy ;;
     update) load_env; update ;;
     env) load_env; env ;;
+    migrate) load_env; migrate ;;
 
     heroku_pg_dump) load_env; heroku_pg_dump ;;
     archive_db) load_env; archive_db ;;

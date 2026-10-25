@@ -1,6 +1,8 @@
 {
   "name": "trema",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
-  "scripts": { "test": "bash tests/run.sh" }
+  "scripts": {
+    "test": "bash -n hooks/post-receive && bash -n bin/trema && bash -n bin/trema-config && bash tests/run.sh"
+  }
 }
