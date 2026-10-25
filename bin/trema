@@ -9,6 +9,7 @@ usage() {
     trema init
     trema destroy
     trema env
+    trema ui
     trema load_pg_dump #pg_dump_file.sql
     trema heroku_pg_dump
     trema config [--global|--help]
@@ -159,7 +160,12 @@ env() {
     do_ssh "cd apps/$TREMA_PROJECT_NAME && vim .env && docker compose --env-file .env up --build --force-recreate -d"
 }
 
-
+ui() {
+    local port=4000
+    echo "Trema UI: http://localhost:$port (Ctrl+C to stop)"
+    (sleep 2; open "http://localhost:$port" 2>/dev/null || xdg-open "http://localhost:$port" 2>/dev/null) &
+    ssh -N -L $port:127.0.0.1:$port $TREMA_USERNAME@$TREMA_HOSTNAME
+}
 
 case "$1" in
     config) config "$2" ;;
@@ -173,6 +179,7 @@ case "$1" in
     deploy) load_env; deploy ;;
     update) load_env; update ;;
     env) load_env; env ;;
+    ui) load_env; ui ;;
 
     heroku_pg_dump) load_env; heroku_pg_dump ;;
     archive_db) load_env; archive_db ;;

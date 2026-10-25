@@ -13,6 +13,7 @@ sanitize_subdomain() {
 }
 
 echo "Deployment will start..."
+DEPLOY_START=$(date +%s)
 
 
 
@@ -68,7 +69,13 @@ if [ "$CUSTOM_COMPOSE" = "0" ]; then
     cp $DOCKER_FILES_DIR/RoR_3_4_8_Puma.Dockerfile $WORK_TREE/Dockerfile
     cp $DOCKER_FILES_DIR/ruby_on_rails_postgres.yml $WORK_TREE/docker-compose.yml
 fi
-docker compose --env-file .env up --build --force-recreate -d
+if docker compose --env-file .env up --build --force-recreate -d; then
+    DEPLOY_RESULT=ok
+else
+    DEPLOY_RESULT=failed
+fi
+# Append to deploys.log (read by the Trema UI): date<TAB>commit<TAB>duration<TAB>result
+printf '%s\t%s\t%s\t%s\n' "$(date -u +%FT%TZ)" "$(git --git-dir="$REPO_DIR" rev-parse --short HEAD)" "$(( $(date +%s) - DEPLOY_START ))" "$DEPLOY_RESULT" >> "$WORK_TREE/deploys.log"
 
 
 WEB_PORT=$(docker compose port web 3000 | cut -d: -f2)
