@@ -10,6 +10,7 @@ usage() {
     trema destroy
     trema env
     trema ui
+    trema ui:install
     trema load_pg_dump #pg_dump_file.sql
     trema heroku_pg_dump
     trema config [--global|--help]
@@ -160,6 +161,12 @@ env() {
     do_ssh "cd apps/$TREMA_PROJECT_NAME && vim .env && docker compose --env-file .env up --build --force-recreate -d"
 }
 
+ui_install() {
+    rsync -r --delete $(trema_path)/ui $(trema_path)/package.json $TREMA_USERNAME@$TREMA_HOSTNAME:trema-ui/
+    do_ssh "sed -e \"s|__USER__|\$USER|g\" -e \"s|__HOME__|\$HOME|g\" ~/trema-ui/ui/trema-ui.service | sudo tee /etc/systemd/system/trema-ui.service >/dev/null && sudo systemctl daemon-reload && sudo systemctl enable trema-ui && sudo systemctl restart trema-ui"
+    echo "✅ Trema UI installed (systemd, restarts on boot). Open it with 'trema ui'"
+}
+
 ui() {
     local port=4000
     echo "Trema UI: http://localhost:$port (Ctrl+C to stop)"
@@ -180,6 +187,7 @@ case "$1" in
     update) load_env; update ;;
     env) load_env; env ;;
     ui) load_env; ui ;;
+    ui:install) load_env; ui_install ;;
 
     heroku_pg_dump) load_env; heroku_pg_dump ;;
     archive_db) load_env; archive_db ;;

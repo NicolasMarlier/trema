@@ -19,7 +19,7 @@ export function parseEnv(text) {
     const key = line.slice(0, i).trim();
     if (!ENV_KEY_RE.test(key)) continue;
     let value = line.slice(i + 1);
-    if (/^(["']).*\1$/.test(value) && value.length >= 2) value = value.slice(1, -1);
+    value = unquote(value);
     out.push({ key, value });
   }
   return out;
@@ -35,9 +35,45 @@ export function serializeEnv(entries) {
     seen.add(key);
     const v = String(value ?? "");
     if (/[\r\n]/.test(v)) throw new Error(`newline in value of ${key}`);
-    return `${key}=${v}`;
+    return `${key}=${quoteValue(v)}`;
   });
   return lines.join("\n") + (lines.length ? "\n" : "");
+}
+
+function unquote(value) {
+  if (value.length >= 2 && value.startsWith("'") && value.endsWith("'")) return value.slice(1, -1);
+  if (value.length >= 2 && value.startsWith('"') && value.endsWith('"')) {
+    return value.slice(1, -1).replace(/\\([\\"$nrt])/g, (_, c) => ({ n: "\n", r: "\r", t: "\t" })[c] ?? c);
+  }
+  return value;
+}
+
+/** Quote a value so docker compose reads it back literally ($, #, spaces, quotes). */
+export function quoteValue(v) {
+  if (!/[$#\s"'\\`]/.test(v) && !/^["']/.test(v)) return v;
+  if (!v.includes("'")) return `'${v}'`;
+  return `"${v.replace(/[\\"$]/g, "\\$&")}"`;
+}
+
+/** Rewrite an existing .env keeping comments/blank lines/order; update, drop and append keys. */
+export function mergeEnv(originalText, entries) {
+  serializeEnv(entries); // validate
+  const map = new Map(entries.map((e) => [e.key, String(e.value ?? "")]));
+  const used = new Set();
+  const out = [];
+  for (const raw of String(originalText).split(/\r?\n/)) {
+    const t = raw.trim();
+    const i = t.indexOf("=");
+    const key = t && !t.startsWith("#") && i > 0 ? t.slice(0, i).trim() : null;
+    if (key && ENV_KEY_RE.test(key)) {
+      if (map.has(key) && !used.has(key)) { used.add(key); out.push(`${key}=${quoteValue(map.get(key))}`); }
+      continue;
+    }
+    out.push(raw);
+  }
+  while (out.length && out[out.length - 1] === "") out.pop();
+  for (const [k, v] of map) if (!used.has(k)) out.push(`${k}=${quoteValue(v)}`);
+  return out.join("\n") + (out.length ? "\n" : "");
 }
 
 export function isSecretKey(key) {

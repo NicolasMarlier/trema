@@ -43,3 +43,14 @@ test("parseDockerPs extracts compose project", () => {
   const line = JSON.stringify({ Names: "blog-web-1", State: "running", Labels: "a=b,com.docker.compose.project=blog" });
   assert.deepEqual(l.parseDockerPs(line + "\nnotjson"), [{ name: "blog-web-1", state: "running", project: "blog" }]);
 });
+test("env values with $ # spaces and quotes round-trip", () => {
+  for (const value of ["pa$word", "a #b", "it's", `q"$x`, "plain", " lead"]) {
+    const e = [{ key: "A", value }];
+    assert.deepEqual(l.parseEnv(l.serializeEnv(e)), e);
+  }
+  assert.equal(l.serializeEnv([{ key: "A", value: "pa$word" }]), "A='pa$word'\n");
+});
+test("mergeEnv keeps comments and order", () => {
+  const out = l.mergeEnv("# hi\nA=1\n\nB=2\n", [{ key: "B", value: "x y" }, { key: "C", value: "3" }]);
+  assert.equal(out, "# hi\n\nB='x y'\nC=3\n");
+});
