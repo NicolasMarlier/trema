@@ -9,12 +9,13 @@ nav{width:220px;background:var(--card);padding:12px}nav button{display:block;wid
 main{flex:1;padding:16px}pre{background:var(--card);padding:8px;max-height:300px;overflow:auto}
 .up{color:var(--ok)}.down{color:var(--ko)}input{margin:2px}
 </style></head><body>
-<nav><h3>Trema</h3><div id="apps"></div></nav>
+<nav><h3>Trema</h3><div id="apps"></div><div id="who"></div></nav>
 <main id="main">Choisissez une app.</main>
 <script>
 const $=s=>document.querySelector(s);let es;
 const api=(p,o)=>fetch('/api/'+p,o&&o.method?{...o,headers:{'content-type':'application/json','x-trema':'1'}}:o).then(r=>r.json());
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+api('me').then(m=>{if(m.public){$('#who').innerHTML='<button id="logout">Déconnexion</button>';$('#logout').onclick=async()=>{await api('logout',{method:'POST',body:'{}'});location.reload();};}}).catch(()=>{});
 async function load(){const a=await api('apps');$('#apps').innerHTML=a.map(x=>`<button data-n="${esc(x.name)}"><span class="${x.status}">●</span> ${esc(x.name)}</button>`).join('');
  document.querySelectorAll('[data-n]').forEach(b=>b.onclick=()=>show(b.dataset.n));}
 async function show(n){if(es)es.close();

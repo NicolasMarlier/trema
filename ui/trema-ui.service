@@ -1,10 +1,12 @@
 [Unit]
-Description=Trema dashboard (127.0.0.1 only)
+Description=Trema dashboard (127.0.0.1 only, public HTTPS via nginx + login)
 After=docker.service network.target
 
 [Service]
 User=__USER__
 Environment=TREMA_HOME=__HOME__
+Environment=TREMA_AUTH=__HOME__/trema-ui/auth.json
+Environment=TREMA_AUDIT=__HOME__/trema-ui/audit.log
 WorkingDirectory=__HOME__/trema-ui
 ExecStart=/usr/bin/env node ui/server.mjs
 Restart=always
