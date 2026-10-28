@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>T-7 — Trema UI accessible depuis le web</title>
+<style>
+  :root{color-scheme:light}
+  *{box-sizing:border-box}
+  body{margin:0;font:15px/1.55 Inter,-apple-system,system-ui,sans-serif;background:#f4f1ea;color:#141517}
+  main{max-width:980px;margin:0 auto;padding:32px 22px 80px}
+  .kicker{letter-spacing:.25em;font-size:11px;text-transform:uppercase;color:#565b58}
+  h1{font-size:28px;margin:4px 0 6px}
+  h2{margin:36px 0 10px;font-size:19px;border-bottom:1px solid #d3cec1;padding-bottom:5px}
+  .mut{color:#565b58}
+  code{font-family:ui-monospace,Menlo,monospace;font-size:13px;background:#ebe7dd;padding:1px 5px;border-radius:4px}
+  .note{border-left:3px solid #f15a24;background:#fbf9f4;padding:10px 14px;border-radius:0 8px 8px 0;margin:14px 0}
+  table{border-collapse:collapse;width:100%;font-size:14px}
+  td,th{border-bottom:1px solid #d3cec1;padding:6px 8px;text-align:left;vertical-align:top}
+  th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#565b58}
+  .proto{border:1px solid #d3cec1;border-radius:12px;overflow:hidden;background:#fbf9f4}
+  .tb{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 12px;background:#ebe7dd;border-bottom:1px solid #d3cec1;font-size:12.5px}
+  .tb button{font:inherit;font-size:12.5px;border:1px solid #d3cec1;background:#fbf9f4;color:#141517;border-radius:6px;padding:3px 10px;cursor:pointer}
+  .tb button.on{background:#141517;color:#f4f1ea;border-color:#141517}
+  .legend{padding:10px 14px;font-size:12.5px;color:#565b58;border-top:1px solid #d3cec1}
+  .url{font:12px ui-monospace,Menlo,monospace;background:#fbf9f4;border:1px solid #d3cec1;border-radius:99px;padding:2px 12px;color:#565b58;flex:1;min-width:200px}
+  .url b{color:#3d8b5a;font-weight:600}
+
+  .app{--bg:#f4f1ea;--panel:#fbf9f4;--panel2:#ebe7dd;--line:#d3cec1;--txt:#141517;--mut:#565b58;--acc:#b93d0d;--brand:#f15a24;--ok:#3d8b5a;--ko:#c0392b;
+       background:var(--bg);color:var(--txt);font-size:13px;height:400px;position:relative;display:flex}
+  .login{margin:auto;width:300px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:22px}
+  .logo{font-weight:700;font-size:18px;color:var(--acc)}
+  .login label{display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);margin:14px 0 4px}
+  .login input{font:inherit;width:100%;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:7px 9px}
+  .btn{font:inherit;font-size:12px;border:1px solid var(--line);background:var(--panel);color:var(--txt);border-radius:6px;padding:5px 10px;cursor:pointer}
+  .btn.pri{background:var(--brand);border-color:var(--brand);color:#141517;font-weight:600;width:100%;margin-top:14px;padding:8px}
+  .err{color:var(--ko);font-size:12px;margin-top:8px;min-height:16px}
+  .dash{display:flex;flex:1}
+  .dash aside{width:200px;border-right:1px solid var(--line);background:var(--panel);padding:12px;display:flex;flex-direction:column;gap:2px}
+  .nav{display:flex;align-items:center;gap:8px;padding:5px 10px;border-radius:6px;color:var(--mut)}
+  .nav.on{background:var(--panel2);color:var(--txt)}
+  .dot{width:8px;height:8px;border-radius:50%}.dot.up{background:var(--ok)}.dot.down{background:var(--ko)}
+  .who{margin-top:auto;font-size:11px;color:var(--mut);padding:0 8px;line-height:1.7}
+  .who a{color:var(--acc);cursor:pointer;text-decoration:underline}
+  .content{flex:1;padding:16px 18px}
+  .pill{font-size:11px;border-radius:99px;padding:1px 8px;font-weight:600;background:color-mix(in srgb,var(--ok) 20%,transparent);color:var(--ok)}
+  .basic{position:absolute;inset:0;background:rgba(20,21,23,.35);display:flex}
+  .basic .box{margin:auto;background:#fff;color:#141517;border-radius:10px;padding:18px;width:320px;box-shadow:0 8px 30px rgba(0,0,0,.25);font-size:13px}
+  .basic input{width:100%;margin:4px 0 8px;padding:5px;border:1px solid #bbb;border-radius:4px;font:inherit}
+
+  .tui{background:#141517;color:#d8d4c9;font:12.5px/1.5 ui-monospace,Menlo,monospace;padding:14px;border-radius:10px;white-space:pre;overflow:auto}
+  .tui .o{color:#f15a24}.tui .g{color:#5fbf80}.tui .m{color:#9da1a5}
+
+  svg.flow text{font:12px Inter,system-ui,sans-serif;fill:#141517}
+  svg.flow .sm{font-size:10.5px;fill:#565b58}
+  svg.flow .b{fill:#fbf9f4;stroke:#d3cec1;stroke-width:1.3}
+  svg.flow .a{fill:#fbf9f4;stroke:#f15a24;stroke-width:1.5}
+  svg.flow .z{fill:none;stroke:#d3cec1;stroke-dasharray:4 4}
+  section[data-usine-q]{margin:14px 0}
+</style>
+</head>
+<body>
+<main>
+  <div class="kicker">Usine · trema · T-7 · Spec</div>
+  <h1>Ouvrir l'interface Trema sur le web</h1>
+  <p class="mut">Pas de description. Aujourd'hui, l'interface Trema (T-3) n'écoute que sur <code>127.0.0.1:4000</code> et on y accède par <code>trema ui</code> (tunnel SSH). Je pars du principe que « accessible depuis le www » veut dire : <b>ouvrir l'interface en HTTPS sur un sous-domaine, protégée par une authentification</b>, pour s'en servir depuis n'importe quel navigateur (téléphone compris) sans SSH. Une autre lecture possible (domaines perso pour les apps hébergées) est proposée en Q1.</p>
+
+  <h2>Objectif</h2>
+  <ul>
+    <li>Ouvrir <code>https://trema.&lt;host&gt;</code> depuis n'importe où, s'identifier, utiliser le tableau de bord comme avant.</li>
+    <li>Rien n'est exposé sans le demander : une commande l'active (<code>trema ui:expose</code>), une autre la désactive (<code>trema ui:unexpose</code>).</li>
+    <li>Le tunnel SSH (<code>trema ui</code>) continue de marcher, sans authentification de plus.</li>
+    <li>Garder le style « léger » : pas de base de données, pas de dépendance npm, on réutilise le nginx et le certbot déjà en place pour les apps.</li>
+  </ul>
+
+  <h2>Prototype</h2>
+  <div class="proto">
+    <div class="tb">
+      <span class="url" id="url">🔒 <b>https://</b>trema.vm.example.com</span>
+      <button data-x="reset">Revenir à l'écran de connexion</button>
+      <button data-x="tunnel">Accès par tunnel SSH</button>
+    </div>
+    <div class="app" id="app"></div>
+    <div class="legend" id="legend"></div>
+  </div>
+
+  <h3>Activation côté CLI</h3>
+  <div class="tui"><span class="m">$</span> trema ui:expose
+Domaine [trema.vm.example.com] :
+Mot de passe (12 caractères min.) : ••••••••••••••
+<span class="g">✅</span> vhost nginx trema.vm.example.com → 127.0.0.1:4000
+<span class="g">✅</span> certificat TLS (certbot)
+<span class="g">✅</span> mot de passe enregistré (haché) dans ~/trema-ui/auth.json
+<span class="g">✅</span> trema-ui redémarré
+<span class="o">→</span> https://trema.vm.example.com
+
+<span class="m">$</span> trema ui:password   <span class="m"># changer le mot de passe, toutes les sessions sont fermées</span>
+<span class="m">$</span> trema ui:unexpose   <span class="m"># supprime le vhost, retour au tunnel seul</span></div>
+
+  <h2>Architecture</h2>
+  <svg class="flow" viewBox="0 0 900 250" width="100%">
+    <defs><marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#565b58"/></marker></defs>
+    <rect class="z" x="230" y="10" width="660" height="230" rx="12"/>
+    <text class="sm" x="242" y="28">VM Trema</text>
+    <rect class="b" x="10" y="40" width="170" height="56" rx="8"/><text x="95" y="63" text-anchor="middle">Navigateur (www)</text><text class="sm" x="95" y="80" text-anchor="middle">https://trema.&lt;host&gt;</text>
+    <rect class="b" x="10" y="150" width="170" height="56" rx="8"/><text x="95" y="173" text-anchor="middle">Poste admin</text><text class="sm" x="95" y="190" text-anchor="middle">trema ui (ssh -L)</text>
+    <rect class="a" x="260" y="40" width="190" height="66" rx="8"/><text x="355" y="63" text-anchor="middle">nginx + TLS (certbot)</text><text class="sm" x="355" y="80" text-anchor="middle">limite de requêtes /login</text><text class="sm" x="355" y="95" text-anchor="middle">transmet X-Forwarded-*</text>
+    <rect class="a" x="510" y="80" width="200" height="90" rx="8"/><text x="610" y="103" text-anchor="middle">trema-ui (127.0.0.1:4000)</text><text class="sm" x="610" y="121" text-anchor="middle">Host autorisé : localhost + domaine</text><text class="sm" x="610" y="137" text-anchor="middle">session requise si accès public</text><text class="sm" x="610" y="153" text-anchor="middle">contrôles CSRF existants</text>
+    <rect class="b" x="750" y="60" width="125" height="40" rx="8"/><text x="812" y="85" text-anchor="middle">Docker / ~/apps</text>
+    <rect class="b" x="750" y="150" width="125" height="40" rx="8"/><text x="812" y="175" text-anchor="middle">auth.json (haché)</text>
+    <line x1="180" y1="68" x2="258" y2="72" stroke="#565b58" marker-end="url(#ar)"/>
+    <line x1="450" y1="85" x2="508" y2="110" stroke="#565b58" marker-end="url(#ar)"/>
+    <line x1="180" y1="178" x2="508" y2="150" stroke="#565b58" stroke-dasharray="5 4" marker-end="url(#ar)"/>
+    <text class="sm" x="300" y="182">tunnel SSH : pas de login (SSH suffit)</text>
+    <line x1="710" y1="110" x2="748" y2="85" stroke="#565b58" marker-end="url(#ar)"/>
+    <line x1="710" y1="145" x2="748" y2="168" stroke="#565b58" marker-end="url(#ar)"/>
+  </svg>
+  <ul>
+    <li><b>nginx</b> : un vhost <code>trema.&lt;host&gt;</code> calqué sur celui des apps (<code>add_nginx_config</code>) + certbot, avec une limite de requêtes sur la route de connexion.</li>
+    <li><b>trema-ui</b> écoute toujours sur la boucle locale uniquement. Il accepte aussi le domaine configuré comme <code>Host</code>/<code>Origin</code>. Une requête qui arrive par nginx (domaine public) doit avoir une session valide, sinon elle voit l'écran de connexion. Une requête sur <code>localhost</code> (tunnel) passe sans login, comme aujourd'hui.</li>
+    <li><b>Authentification</b> : un seul mot de passe admin, haché (scrypt, natif dans Node) dans un fichier côté VM, et un cookie de session <code>HttpOnly; Secure; SameSite=Strict</code> signé. Pas de comptes multiples.</li>
+  </ul>
+
+  <h2>Parcours</h2>
+  <svg class="flow" viewBox="0 0 900 90" width="100%">
+    <defs><marker id="ar2" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#565b58"/></marker></defs>
+    <rect class="b" x="10" y="20" width="150" height="50" rx="8"/><text x="85" y="42" text-anchor="middle">GET trema.&lt;host&gt;</text><text class="sm" x="85" y="58" text-anchor="middle">sans session</text>
+    <rect class="b" x="190" y="20" width="150" height="50" rx="8"/><text x="265" y="42" text-anchor="middle">Écran de connexion</text><text class="sm" x="265" y="58" text-anchor="middle">mot de passe</text>
+    <rect class="a" x="370" y="20" width="160" height="50" rx="8"/><text x="450" y="42" text-anchor="middle">Vérification</text><text class="sm" x="450" y="58" text-anchor="middle">+ délai si échecs répétés</text>
+    <rect class="b" x="560" y="20" width="160" height="50" rx="8"/><text x="640" y="42" text-anchor="middle">Cookie de session</text><text class="sm" x="640" y="58" text-anchor="middle">durée : Q5</text>
+    <rect class="b" x="750" y="20" width="140" height="50" rx="8"/><text x="820" y="42" text-anchor="middle">Tableau de bord</text><text class="sm" x="820" y="58" text-anchor="middle">+ « Déconnexion »</text>
+    <line x1="160" y1="45" x2="188" y2="45" stroke="#565b58" marker-end="url(#ar2)"/>
+    <line x1="340" y1="45" x2="368" y2="45" stroke="#565b58" marker-end="url(#ar2)"/>
+    <line x1="530" y1="45" x2="558" y2="45" stroke="#565b58" marker-end="url(#ar2)"/>
+    <line x1="720" y1="45" x2="748" y2="45" stroke="#565b58" marker-end="url(#ar2)"/>
+  </svg>
+
+  <div class="note"><b>Risque :</b> l'interface a accès au socket Docker et aux secrets <code>.env</code>, donc la compromettre revient à être root sur le VM. Il faut donc : HTTPS obligatoire, mot de passe long, limite de tentatives, sessions révocables (<code>trema ui:password</code>) et retour possible au tunnel seul (<code>ui:unexpose</code>). Il faudra aussi mettre à jour la mise en garde « ne jamais l'exposer » du README.</div>
+
+  <h2>Hors périmètre</h2>
+  <ul class="mut">
+    <li>Comptes multiples, rôles, SSO/OAuth.</li>
+    <li>Domaines personnalisés pour les apps hébergées (sauf si Q1 = b).</li>
+  </ul>
+
+  <h2>Questions ouvertes</h2>
+
+  <section data-usine-q="Q1" data-kind="single" data-label="Que doit-on rendre accessible depuis le www ?" data-reco="a">
+    <div data-option="a">L'interface Trema (tableau de bord), en HTTPS avec authentification</div>
+    <div data-option="b">Les apps hébergées sur leur propre domaine (ex. www.monapp.fr) en plus de &lt;app&gt;.&lt;host&gt;</div>
+  </section>
+  <p class="mut">Reco : <b>a</b>. Les apps sont déjà publiques via <code>&lt;app&gt;.&lt;host&gt;</code> ; seule l'interface ne l'est pas. Si b, cette spec est à refaire.</p>
+
+  <section data-usine-q="Q2" data-kind="single" data-label="Mécanisme d'authentification ?" data-reco="a">
+    <div data-option="a">Écran de connexion dans l'interface (mot de passe haché + cookie de session)</div>
+    <div data-option="b">Basic auth nginx (popup du navigateur, htpasswd)</div>
+    <div data-option="c">a + second facteur TOTP (application d'authentification)</div>
+  </section>
+  <p class="mut">Reco : <b>a</b>. On peut se déconnecter, limiter les tentatives et révoquer les sessions, et c'est plus agréable sur mobile. b est plus rapide à faire mais la déconnexion est mal gérée. c peut venir plus tard.</p>
+  <div data-when="Q2=b" class="note">Variante b : le prototype affiche la popup du navigateur à la place de l'écran de connexion (bouton « Revenir à l'écran de connexion »).</div>
+
+  <section data-usine-q="Q3" data-kind="single" data-label="Quel domaine ?" data-reco="b">
+    <div data-option="a">Toujours <code>trema.&lt;host&gt;</code></div>
+    <div data-option="b">Proposé par défaut à <code>trema.&lt;host&gt;</code>, modifiable lors de <code>ui:expose</code></div>
+  </section>
+  <p class="mut">Reco : <b>b</b>. Ça évite un conflit si une app s'appelle déjà « trema ».</p>
+
+  <section data-usine-q="Q4" data-kind="single" data-label="Activation ?" data-reco="a">
+    <div data-option="a">Sur demande, avec une commande à part <code>trema ui:expose</code> / <code>ui:unexpose</code></div>
+    <div data-option="b">Automatique à chaque <code>trema ui:install</code></div>
+  </section>
+  <p class="mut">Reco : <b>a</b>. Rien n'est exposé sans le vouloir, et c'est facile à couper.</p>
+
+  <section data-usine-q="Q5" data-kind="text" data-label="Durée d'une session avant de devoir se reconnecter ?" data-reco="7 jours">
+  </section>
+
+  <section data-usine-q="Q6" data-kind="multi" data-label="Protections supplémentaires à inclure ?" data-reco="ratelimit,audit">
+    <div data-option="ratelimit">Limite des tentatives de connexion (nginx + délai côté serveur)</div>
+    <div data-option="audit">Journal des connexions et des actions (fichier sur le VM)</div>
+    <div data-option="allowlist">Liste d'IP autorisées (optionnelle, réglée dans nginx)</div>
+    <div data-option="readonly">Mode lecture seule en accès public (actions seulement par tunnel)</div>
+  </section>
+  <p class="mut">Reco : <b>limite de tentatives + journal</b>. La liste d'IP ne sert à rien en mobilité, et la lecture seule retire l'intérêt principal.</p>
+</main>
+
+<script>
+(function(){
+  var S={screen:"login",tries:0,tunnel:false};
+  var $=function(id){return document.getElementById(id)};
+  function q2(){var el=document.querySelector('[data-usine-q="Q2"]');var v=el&&(el.getAttribute("data-value")||el.dataset.answer);return v||"a"}
+  function dash(){
+    return '<div class="dash"><aside><div class="logo" style="padding:0 8px">▲ Trema</div><div style="font:11px ui-monospace,Menlo,monospace;color:var(--mut);padding:0 8px 10px">'+(S.tunnel?"localhost:4000":"trema.vm.example.com")+'</div>'+
+      '<div class="nav on"><span class="dot up"></span>blog</div><div class="nav"><span class="dot up"></span>shop-api</div><div class="nav"><span class="dot down"></span>side-project</div>'+
+      '<div class="who">'+(S.tunnel?'Accès via tunnel SSH<br>(pas de session)':'Connecté · session 7 j<br><a data-x="logout">Déconnexion</a>')+'</div></aside>'+
+      '<div class="content"><h3 style="margin:0 0 6px">blog <span class="pill">● en ligne</span></h3><p style="color:var(--mut)">Tableau de bord inchangé (T-3) : logs, env, déploiements…</p></div></div>';
+  }
+  function render(){
+    var app=$("app"),lg=$("legend"),u=$("url");
+    u.innerHTML=S.tunnel?'http://localhost:4000 <span style="opacity:.6">(tunnel)</span>':'🔒 <b>https://</b>trema.vm.example.com';
+    $("app").parentNode.querySelector('[data-x="tunnel"]').classList.toggle("on",S.tunnel);
+    if(S.tunnel||S.screen==="dash"){app.innerHTML=dash();lg.textContent=S.tunnel?"Par le tunnel SSH, pas de connexion à faire : la clé SSH suffit.":"Connecté. « Déconnexion » supprime la session côté serveur.";return}
+    if(q2()==="b"){
+      app.innerHTML='<div class="basic"><div class="box"><b>Connexion</b><p style="margin:6px 0 10px;color:#555">https://trema.vm.example.com demande un nom d\'utilisateur et un mot de passe.</p>Utilisateur<input value="admin">Mot de passe<input type="password" id="pw"><div style="text-align:right"><button class="btn" data-x="login">Se connecter</button></div></div></div>';
+      lg.textContent="Variante basic auth : popup du navigateur, pas de bouton de déconnexion.";return;
+    }
+    app.innerHTML='<div class="login"><div class="logo">▲ Trema</div><div style="color:var(--mut);font-size:12px">trema.vm.example.com</div>'+
+      '<label>Mot de passe</label><input type="password" id="pw" placeholder="mot de passe admin">'+
+      '<button class="btn pri" data-x="login">Se connecter</button><div class="err" id="err"></div></div>';
+    lg.innerHTML='Essayez un mauvais mot de passe pour voir la limite de tentatives, puis <code>trema</code> pour entrer.';
+  }
+  document.addEventListener("click",function(e){
+    var t=e.target.closest("[data-x]");if(!t)return;var x=t.dataset.x;
+    if(x==="login"){
+      var pw=($("pw")||{}).value;
+      if(pw==="trema"||q2()==="b"){S.screen="dash";S.tries=0}
+      else{S.tries++;render();$("err").textContent=S.tries>=3?"Trop de tentatives — réessayez dans "+(S.tries*5)+" s.":"Mot de passe incorrect.";return}
+    }
+    else if(x==="logout"||x==="reset"){S.screen="login";S.tunnel=false}
+    else if(x==="tunnel"){S.tunnel=!S.tunnel}
+    render();
+  });
+  document.addEventListener("keydown",function(e){if(e.key==="Enter"&&e.target.id==="pw"){var b=document.querySelector('[data-x="login"]');b&&b.click()}});
+  document.addEventListener("change",function(){setTimeout(render,0)});
+  render();
+})();
+</script>
+</body>
+</html>
