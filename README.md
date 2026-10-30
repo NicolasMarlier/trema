@@ -2,7 +2,7 @@
 Lightweight, host-your-own, heroku-like PaaS
 
 # Installation
-- [ ] TODO: write
+Voir [docs/architecture.html](docs/architecture.html#install) (prérequis et étapes), ainsi que l'architecture complète : ce qui est centralisé sur la VM, ce qui est par app, et les flux.
 
 ### Improvement ideas
 - [X] Trema config to set global address
