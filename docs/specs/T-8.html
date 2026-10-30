@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>T-8 — Documentation d'architecture</title>
+<style>
+  :root{color-scheme:light}
+  *{box-sizing:border-box}
+  body{margin:0;font:15px/1.55 Inter,-apple-system,system-ui,sans-serif;background:#f4f1ea;color:#141517}
+  main{max-width:1000px;margin:0 auto;padding:32px 22px 80px}
+  .kicker{letter-spacing:.25em;font-size:11px;text-transform:uppercase;color:#565b58}
+  h1{font-size:28px;margin:4px 0 6px}
+  h2{margin:36px 0 10px;font-size:19px;border-bottom:1px solid #d3cec1;padding-bottom:5px}
+  h3{font-size:15px;margin:20px 0 8px}
+  .mut{color:#565b58}
+  code{font-family:ui-monospace,Menlo,monospace;font-size:13px;background:#ebe7dd;padding:1px 5px;border-radius:4px}
+  .note{border-left:3px solid #f15a24;background:#fbf9f4;padding:10px 14px;border-radius:0 8px 8px 0;margin:14px 0}
+  table{border-collapse:collapse;width:100%;font-size:14px}
+  td,th{border-bottom:1px solid #d3cec1;padding:6px 8px;text-align:left;vertical-align:top}
+  th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#565b58}
+  .proto{border:1px solid #d3cec1;border-radius:12px;overflow:hidden;background:#fbf9f4}
+  .tb{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 12px;background:#ebe7dd;border-bottom:1px solid #d3cec1;font-size:12.5px}
+  .tb button{font:inherit;font-size:12.5px;border:1px solid #d3cec1;background:#fbf9f4;color:#141517;border-radius:6px;padding:3px 10px;cursor:pointer}
+  .tb button.on{background:#141517;color:#f4f1ea;border-color:#141517}
+  .tb .sep{width:1px;height:18px;background:#d3cec1;margin:0 4px}
+  .legend{padding:10px 14px;font-size:13px;color:#141517;border-top:1px solid #d3cec1;min-height:64px;background:#fff}
+  .legend .mut{font-size:12.5px}
+
+  .map{display:grid;grid-template-columns:1fr 2.2fr;gap:14px;padding:14px}
+  .zone{border:1.5px dashed #d3cec1;border-radius:12px;padding:10px 10px 12px}
+  .zone h4{margin:0 0 8px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#565b58}
+  .vm{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .card{display:block;width:100%;text-align:left;font:inherit;font-size:13px;background:#fbf9f4;border:1.3px solid #d3cec1;border-radius:8px;padding:6px 9px;margin:0 0 6px;cursor:pointer;color:#141517;transition:opacity .15s,border-color .15s}
+  .card small{display:block;font:11px ui-monospace,Menlo,monospace;color:#565b58}
+  .card[data-k="central"]{border-left:4px solid #f15a24}
+  .card[data-k="app"]{border-left:4px solid #3d6e8b}
+  .card[data-k="local"]{border-left:4px solid #3d8b5a}
+  .card.dim{opacity:.25}
+  .card.sel{border-color:#141517;box-shadow:0 0 0 2px #14151722}
+  .card.hl{border-color:#f15a24;box-shadow:0 0 0 3px #f15a2433}
+  .chip{display:inline-block;font-size:11px;border-radius:99px;padding:1px 8px;font-weight:600;margin-right:4px}
+  .c-central{background:#f15a2422;color:#b93d0d}.c-app{background:#3d6e8b22;color:#2c5670}.c-local{background:#3d8b5a22;color:#2d6a44}
+
+  .doc{display:grid;grid-template-columns:220px 1fr;min-height:260px}
+  .doc nav{border-right:1px solid #d3cec1;padding:12px;background:#ebe7dd;font-size:13px}
+  .doc nav a{display:block;padding:4px 8px;border-radius:6px;color:#141517;text-decoration:none;cursor:pointer}
+  .doc nav a.on{background:#fbf9f4;font-weight:600}
+  .doc article{padding:14px 18px;font-size:13.5px}
+  .doc article h5{margin:0 0 8px;font-size:15px}
+
+  svg.flow text{font:12px Inter,system-ui,sans-serif;fill:#141517}
+  svg.flow .sm{font-size:10.5px;fill:#565b58}
+  svg.flow .b{fill:#fbf9f4;stroke:#d3cec1;stroke-width:1.3}
+  svg.flow .a{fill:#fbf9f4;stroke:#f15a24;stroke-width:1.5}
+  section[data-usine-q]{margin:14px 0}
+</style>
+</head>
+<body>
+<main>
+  <div class="kicker">Usine · trema · T-8 · Spec</div>
+  <h1>Documenter l'architecture de Trema</h1>
+  <p class="mut">Description : « What's centralize or not, etc. » Je comprends qu'il faut <b>une page de doc qui explique où vit chaque élément de Trema</b> : sur le poste du développeur, sur le VM et partagé par toutes les apps, ou sur le VM et propre à une app. Elle doit aussi expliquer les flux principaux (init, déploiement, env, UI). Cette tâche ne demande que de la doc : on ne change pas le code.</p>
+
+  <h2>Objectif</h2>
+  <ul>
+    <li>Une personne qui découvre le repo comprend en 5 minutes ce qui tourne où, et ce que chaque commande <code>trema</code> touche.</li>
+    <li>On répond clairement à « qu'est-ce qui est centralisé ? » et on montre les points sensibles. Exemple : le hook est <b>copié dans chaque app</b>, donc il faut un <code>trema update</code> pour mettre une app à jour.</li>
+    <li>La doc est en français (conventions), dans le repo, et le README pointe vers elle.</li>
+  </ul>
+
+  <h2>Contenu prévu du document</h2>
+  <table>
+    <tr><th>Section</th><th>Contenu</th></tr>
+    <tr><td>1. Vue d'ensemble</td><td>Trema = CLI bash + un VM (nginx, certbot, Docker) + une UI Node optionnelle. Un seul VM, un seul utilisateur, aucune base de données de Trema.</td></tr>
+    <tr><td>2. Où vit quoi</td><td>Carte en 3 zones (voir le prototype ci-dessous) et tableau des fichiers et chemins.</td></tr>
+    <tr><td>3. Centralisé ou par app</td><td>Ce qui est partagé, ce qui est isolé par app, ce qui est copié (et peut donc être en retard de version).</td></tr>
+    <tr><td>4. Flux</td><td><code>trema init</code>, <code>git push trema main</code>, <code>trema env</code> / UI, <code>trema update</code>, <code>destroy</code>.</td></tr>
+    <tr><td>5. Réseau &amp; sécurité</td><td>Ports (port web aléatoire → nginx, UI sur 127.0.0.1:4000), TLS, tunnel SSH ou accès web, où se trouvent les secrets.</td></tr>
+    <tr><td>6. Limites connues</td><td>Comportement observé aujourd'hui, sans plan d'action (voir Q3) : un seul VM, Postgres par app sans sauvegarde automatique, pas de registre d'apps (la liste = <code>~/apps/*</code>), template Rails figé.</td></tr>
+  </table>
+
+  <h2>Prototype — carte « où vit quoi »</h2>
+  <p class="mut">Le schéma central de la doc (le rendu final dépend de Q2). Filtrez par type ou cliquez sur un élément. Les flux mettent en évidence les éléments touchés.</p>
+  <div class="proto">
+    <div class="tb">
+      <b style="margin-right:4px">Filtre</b>
+      <button data-f="all" class="on">Tout</button>
+      <button data-f="central">Centralisé (VM, partagé)</button>
+      <button data-f="app">Par app (VM)</button>
+      <button data-f="local">Poste local</button>
+      <span class="sep"></span>
+      <b style="margin-right:4px">Flux</b>
+      <button data-w="init">trema init</button>
+      <button data-w="push">git push trema main</button>
+      <button data-w="env">trema env / UI</button>
+      <button data-w="update">trema update</button>
+    </div>
+    <div class="map">
+      <div class="zone"><h4>Poste du développeur</h4><div id="z-local"></div></div>
+      <div class="zone"><h4>VM Trema (ssh user@host)</h4>
+        <div class="vm">
+          <div><h4 style="font-size:10px">Partagé par toutes les apps</h4><div id="z-central"></div></div>
+          <div><h4 style="font-size:10px">Une copie par app (×N)</h4><div id="z-app"></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="legend" id="legend"><span class="mut">Cliquez sur un élément pour voir son rôle, son chemin et la commande qui le crée.</span></div>
+  </div>
+
+  <h2>Flux de déploiement (exemple de schéma)</h2>
+  <svg class="flow" viewBox="0 0 940 120" width="100%">
+    <defs><marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#565b58"/></marker></defs>
+    <rect class="b" x="5" y="30" width="130" height="56" rx="8"/><text x="70" y="53" text-anchor="middle">git push trema</text><text class="sm" x="70" y="70" text-anchor="middle">poste local</text>
+    <rect class="b" x="160" y="30" width="140" height="56" rx="8"/><text x="230" y="53" text-anchor="middle">repos/&lt;app&gt;</text><text class="sm" x="230" y="70" text-anchor="middle">hook post-receive</text>
+    <rect class="b" x="325" y="30" width="140" height="56" rx="8"/><text x="395" y="53" text-anchor="middle">apps/&lt;app&gt;</text><text class="sm" x="395" y="70" text-anchor="middle">checkout + .env</text>
+    <rect class="a" x="490" y="22" width="150" height="72" rx="8"/><text x="565" y="45" text-anchor="middle">compose app ?</text><text class="sm" x="565" y="62" text-anchor="middle">oui : tel quel</text><text class="sm" x="565" y="78" text-anchor="middle">non : template Rails + migr.</text>
+    <rect class="b" x="665" y="30" width="125" height="56" rx="8"/><text x="727" y="53" text-anchor="middle">docker compose up</text><text class="sm" x="727" y="70" text-anchor="middle">→ deploys.log</text>
+    <rect class="b" x="815" y="30" width="120" height="56" rx="8"/><text x="875" y="53" text-anchor="middle">nginx proxy_pass</text><text class="sm" x="875" y="70" text-anchor="middle">port web → restart</text>
+    <line x1="135" y1="58" x2="158" y2="58" stroke="#565b58" marker-end="url(#ar)"/>
+    <line x1="300" y1="58" x2="323" y2="58" stroke="#565b58" marker-end="url(#ar)"/>
+    <line x1="465" y1="58" x2="488" y2="58" stroke="#565b58" marker-end="url(#ar)"/>
+    <line x1="640" y1="58" x2="663" y2="58" stroke="#565b58" marker-end="url(#ar)"/>
+    <line x1="790" y1="58" x2="813" y2="58" stroke="#565b58" marker-end="url(#ar)"/>
+    <text class="sm" x="490" y="112">si la migration échoue : arrêt, l'ancienne version reste en ligne</text>
+  </svg>
+
+  <div class="note"><b>Point clé à mettre en avant :</b> sur le VM, <i>centralisé</i> ne veut pas toujours dire <i>partagé à l'exécution</i>. Les templates <code>~/docker_compose_files</code> sont centraux, mais ils sont <b>copiés</b> dans <code>apps/&lt;app&gt;</code> à chaque déploiement. Le hook est <b>copié</b> une fois par app, à l'<code>init</code> et à l'<code>update</code>. La doc distinguera trois états : <span class="chip c-central">partagé</span> <span class="chip c-app">par app</span> <span class="chip" style="background:#ebe7dd">copié depuis le central</span>.</div>
+
+  <h2>Livrable</h2>
+  <ul>
+    <li>Un fichier de doc (format et emplacement : Q1), avec des schémas (format : Q2).</li>
+    <li>Un lien depuis le README, et la section « Installation — TODO » renvoie vers la doc si Q4 = oui.</li>
+    <li>On ne change pas le code. Pas de tests (pas de logique métier).</li>
+  </ul>
+
+  <h2>Hors périmètre</h2>
+  <ul class="mut">
+    <li>Refactorer ce qui est copié (ex. un hook unique partagé) : ce sera une tâche à part si besoin.</li>
+    <li>Une doc utilisateur complète pour chaque commande (le <code>usage</code> du CLI suffit).</li>
+  </ul>
+
+  <h2>Questions ouvertes</h2>
+
+  <section data-usine-q="Q1" data-kind="single" data-label="Format et emplacement de la doc ?" data-reco="a">
+    <div data-option="a">docs/architecture.md (Markdown, lisible sur GitHub) + lien depuis le README</div>
+    <div data-option="b">Section « Architecture » directement dans le README</div>
+    <div data-option="c">Page HTML interactive (comme ce prototype) dans docs/</div>
+  </section>
+  <p class="mut">Reco : <b>a</b>. Facile à relire en PR et rendu natif sur GitHub. Le README est déjà long. Une page HTML n'est pas rendue par GitHub.</p>
+
+  <section data-usine-q="Q2" data-kind="single" data-label="Format des schémas ?" data-reco="a">
+    <div data-option="a">Mermaid (rendu par GitHub, éditable en texte)</div>
+    <div data-option="b">SVG versionnés dans docs/</div>
+    <div data-option="c">ASCII art dans le Markdown</div>
+  </section>
+  <p class="mut">Reco : <b>a</b>. Les schémas restent faciles à maintenir avec le code. Le SVG est plus joli mais pénible à modifier.</p>
+  <div data-when="Q1=c" class="note">Avec une page HTML, les schémas seraient en SVG inline et la carte interactive ci-dessus serait reprise telle quelle.</div>
+
+  <section data-usine-q="Q3" data-kind="single" data-label="Ton de la section « Limites » ?" data-reco="a">
+    <div data-option="a">Constat seulement (ce qui est copié, ce qui manque)</div>
+    <div data-option="b">Constat + pistes d'évolution (ex. hook partagé, registre d'apps, sauvegardes)</div>
+  </section>
+  <p class="mut">Reco : <b>a</b>. La doc reste factuelle et ne se périme pas vite. Les pistes peuvent aller dans « Improvement ideas » du README.</p>
+
+  <section data-usine-q="Q4" data-kind="single" data-label="Inclure aussi la procédure d'installation (le TODO du README) ?" data-reco="b">
+    <div data-option="a">Oui, dans la même tâche</div>
+    <div data-option="b">Non, tâche séparée</div>
+  </section>
+  <p class="mut">Reco : <b>b</b>. Garder une PR petite. L'architecture décrit, l'installation guide pas à pas.</p>
+
+  <section data-usine-q="Q5" data-kind="text" data-label="Autre chose à couvrir absolument (public visé, sujets précis) ?" data-reco="Public : moi + contributeurs ; rien de plus">
+  </section>
+</main>
+
+<script>
+(function(){
+  var C=[
+    {id:"cli",z:"local",k:"local",t:"CLI trema",p:"bin/trema, bin/trema-config",d:"Scripts bash lancés en local. Toutes les actions passent par ssh/rsync vers le VM.",by:"clone du repo trema"},
+    {id:"gcfg",z:"local",k:"local",t:"Config globale",p:"~/.trema_config",d:"Hostname et user par défaut, partagés par tous les projets du poste.",by:"trema config:edit --global"},
+    {id:"lcfg",z:"local",k:"local",t:"Config projet",p:"<projet>/trema.env",d:"TREMA_HOSTNAME, TREMA_USERNAME, TREMA_PROJECT_NAME (= nom du dossier).",by:"trema init"},
+    {id:"remote",z:"local",k:"local",t:"Remote git « trema »",p:"user@host:repos/<app>",d:"On déploie avec git push trema main.",by:"trema init"},
+    {id:"dumps_l",z:"local",k:"local",t:"Dumps locaux",p:"<projet>/data/*.sql",d:"Exports de la base de données (archive_db, heroku_pg_dump).",by:"trema archive_db"},
+
+    {id:"nginx",z:"central",k:"central",t:"nginx + certbot",p:"/etc/nginx/sites-enabled/*",d:"Un seul reverse proxy pour tout le VM. Un vhost par app (<app>.<host>) + un pour l'UI (trema.<host>). TLS géré par certbot.",by:"installé à la main ; vhosts créés par trema init / ui:install"},
+    {id:"docker",z:"central",k:"central",t:"Docker daemon",p:"/etc/docker/daemon.json",d:"Le même moteur pour toutes les apps. Rotation des logs configurée par server:setup.",by:"trema server:setup"},
+    {id:"tpl",z:"central",k:"central",t:"Templates",p:"~/docker_compose_files/",d:"Dockerfile Rails + compose Postgres. Ils sont centraux mais copiés dans apps/<app> à chaque déploiement.",by:"trema update"},
+    {id:"dbd",z:"central",k:"central",t:"Dumps partagés",p:"/db_dumps (+ cron prune)",d:"Un dossier commun monté dans le conteneur db de chaque app. Le cron garde les 10 derniers dumps par app.",by:"trema server:setup"},
+    {id:"ui",z:"central",k:"central",t:"Trema UI",p:"~/trema-ui (systemd, 127.0.0.1:4000)",d:"Un seul tableau de bord pour toutes les apps. Il lit ~/apps/* et le socket Docker. Accès par tunnel SSH ou https://trema.<host>.",by:"trema ui:install"},
+    {id:"auth",z:"central",k:"central",t:"Auth & audit UI",p:"~/trema-ui/auth.json, audit.log",d:"Mot de passe haché (scrypt), secret TOTP, clé de session et journal des actions.",by:"trema ui:install / ui:password"},
+
+    {id:"repo",z:"app",k:"app",t:"Repo nu",p:"~/repos/<app>.git",d:"Reçoit les push.",by:"trema init"},
+    {id:"hook",z:"app",k:"app",t:"Hook post-receive",p:"~/repos/<app>/hooks/",d:"Une copie par app, donc des versions qui peuvent différer. Il faut trema update pour recevoir un nouveau hook.",by:"trema init / update"},
+    {id:"wt",z:"app",k:"app",t:"Worktree",p:"~/apps/<app>/",d:"Code checkout + Dockerfile/compose (de l'app ou du template).",by:"git push"},
+    {id:"env",z:"app",k:"app",t:"Secrets .env",p:"~/apps/<app>/.env",d:"Créé au 1er déploiement (identifiants Postgres aléatoires ou .env.example), avec le WEB_PORT. Il n'existe que sur le VM.",by:"git push (1er), trema env / UI"},
+    {id:"log",z:"app",k:"app",t:"deploys.log",p:"~/apps/<app>/deploys.log",d:"Historique : date, commit, durée, résultat. Lu par l'UI.",by:"hook / UI"},
+    {id:"ctr",z:"app",k:"app",t:"Conteneurs web + db",p:"projet compose <app>",d:"Isolés par app : un Postgres et un volume db_data par app. Le port web est aléatoire, en loopback, derrière nginx.",by:"git push"}
+  ];
+  var W={
+    init:{ids:["cli","gcfg","lcfg","remote","repo","hook","nginx"],txt:"trema init : crée trema.env, le repo nu et le hook sur le VM, puis le vhost nginx + certbot et le remote git."},
+    push:{ids:["remote","repo","hook","wt","tpl","env","ctr","log","nginx"],txt:"git push : le hook fait le checkout, copie le template si besoin, migre la base, lance compose up, écrit deploys.log et met à jour proxy_pass dans nginx."},
+    env:{ids:["cli","ui","env","ctr","log"],txt:"trema env (vim en SSH) ou l'UI : modifie .env puis relance compose up --force-recreate."},
+    update:{ids:["cli","tpl","docker","dbd","hook"],txt:"trema update : resynchronise les templates, relance server:setup et recopie le hook (pour l'app courante seulement)."}
+  };
+  var S={f:"all",w:null,sel:null};
+  var lab={central:"Centralisé",app:"Par app",local:"Poste local"};
+  function esc(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}
+  function render(){
+    ["local","central","app"].forEach(function(z){
+      document.getElementById("z-"+z).innerHTML=C.filter(function(c){return c.z===z}).map(function(c){
+        var cls="card";
+        if(S.f!=="all"&&c.k!==S.f)cls+=" dim";
+        if(S.w&&W[S.w].ids.indexOf(c.id)<0)cls+=" dim";
+        if(S.w&&W[S.w].ids.indexOf(c.id)>=0)cls+=" hl";
+        if(S.sel===c.id)cls+=" sel";
+        return '<button class="'+cls+'" data-k="'+c.k+'" data-id="'+c.id+'">'+esc(c.t)+'<small>'+esc(c.p)+'</small></button>';
+      }).join("");
+    });
+    document.querySelectorAll("[data-f]").forEach(function(b){b.classList.toggle("on",b.dataset.f===S.f)});
+    document.querySelectorAll("[data-w]").forEach(function(b){b.classList.toggle("on",b.dataset.w===S.w)});
+    var lg=document.getElementById("legend"),c=C.filter(function(x){return x.id===S.sel})[0];
+    if(c){lg.innerHTML='<span class="chip c-'+c.k+'">'+lab[c.k]+'</span><b>'+esc(c.t)+'</b> — <code>'+esc(c.p)+'</code><br>'+esc(c.d)+'<br><span class="mut">Créé / modifié par : '+esc(c.by)+'</span>'}
+    else if(S.w){lg.innerHTML='<b>Flux</b> — '+esc(W[S.w].txt)}
+    else lg.innerHTML='<span class="mut">Cliquez sur un élément pour voir son rôle, son chemin et la commande qui le crée.</span>';
+  }
+  document.addEventListener("click",function(e){
+    var t=e.target.closest("[data-f],[data-w],[data-id]");if(!t)return;
+    if(t.dataset.f){S.f=t.dataset.f;S.w=null;S.sel=null}
+    else if(t.dataset.w){S.w=S.w===t.dataset.w?null:t.dataset.w;S.f="all";S.sel=null}
+    else if(t.dataset.id){S.sel=S.sel===t.dataset.id?null:t.dataset.id}
+    render();
+  });
+  render();
+})();
+</script>
+</body>
+</html>

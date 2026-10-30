@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 250" font-family="system-ui,sans-serif" font-size="13">
+<title>Flux d'un git push trema main</title>
+<defs><marker id="a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8z" fill="#444"/></marker></defs>
+<g fill="#fff" stroke="#444">
+<rect x="10" y="90" width="130" height="60" rx="8"/><rect x="170" y="90" width="130" height="60" rx="8"/><rect x="330" y="90" width="130" height="60" rx="8"/><rect x="490" y="90" width="130" height="60" rx="8"/><rect x="650" y="90" width="110" height="60" rx="8"/><rect x="780" y="90" width="110" height="60" rx="8"/></g>
+<g text-anchor="middle"><text x="75" y="115">git push</text><text x="75" y="133" fill="#555">poste local</text>
+<text x="235" y="115">repos/&lt;app&gt;</text><text x="235" y="133" fill="#555">post-receive</text>
+<text x="395" y="115">apps/&lt;app&gt;</text><text x="395" y="133" fill="#555">checkout + .env</text>
+<text x="555" y="115">docker compose</text><text x="555" y="133" fill="#555">migrate, build, up</text>
+<text x="705" y="115">nginx</text><text x="705" y="133" fill="#555">proxy_pass WEB_PORT</text>
+<text x="835" y="115">HTTPS</text><text x="835" y="133" fill="#555">&lt;app&gt;.&lt;hôte&gt;</text></g>
+<g stroke="#444" marker-end="url(#a)"><line x1="140" y1="120" x2="168" y2="120"/><line x1="300" y1="120" x2="328" y2="120"/><line x1="460" y1="120" x2="488" y2="120"/><line x1="620" y1="120" x2="648" y2="120"/><line x1="760" y1="120" x2="778" y2="120"/></g>
+<text x="450" y="200" text-anchor="middle" fill="#555">Chaque déploiement ajoute une ligne à apps/&lt;app&gt;/deploys.log. Si la migration échoue, l'ancienne version reste en ligne.</text>
+</svg>
