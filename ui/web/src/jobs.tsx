@@ -17,7 +17,12 @@ export function useJobs(onDone: (j: JobState) => void) {
     if (j.state !== "running" || sources.current.has(j.id)) return;
     const es = new EventSource(`/api/jobs/${j.id}/stream`);
     sources.current.set(j.id, es);
-    es.addEventListener("init", (e) => { const v = JSON.parse((e as MessageEvent).data); setJobs((m) => ({ ...m, [j.app]: { ...v, output: v.output ?? "" } })); });
+    es.addEventListener("init", (e) => {
+      const v = JSON.parse((e as MessageEvent).data);
+      const next = { ...v, output: v.output ?? "" };
+      setJobs((m) => ({ ...m, [j.app]: next }));
+      if (v.state !== "running") { es.close(); sources.current.delete(j.id); doneRef.current(next); }
+    });
     es.addEventListener("out", (e) => { const t = JSON.parse((e as MessageEvent).data) as string; setJobs((m) => m[j.app]?.id === j.id ? { ...m, [j.app]: { ...m[j.app], output: (m[j.app].output + t).slice(-50_000) } } : m); });
     es.addEventListener("done", (e) => {
       const v = JSON.parse((e as MessageEvent).data);

@@ -101,7 +101,8 @@ export function Env({ app, busy, onRedeploy }: { app: string; busy: boolean; onR
   const r = useResource<EnvKey[]>(`env:${app}`, () => api(appPath(app, "env")));
   const [edited, setEdited] = useState<Record<string, string>>({});
   const [removed, setRemoved] = useState<string[]>([]);
-  const [added, setAdded] = useState<string[]>([]);
+  const [added, setAdded] = useState<{ id: number; key: string; value: string }[]>([]);
+  const nextId = useRef(0);
   const [confirm, setConfirm] = useState(false);
   const [saving, setSaving] = useState(false);
   useEffect(() => { setEdited({}); setRemoved([]); setAdded([]); }, [app]);
@@ -111,10 +112,13 @@ export function Env({ app, busy, onRedeploy }: { app: string; busy: boolean; onR
   const loaded = useRef<Record<string, string>>({});
   const changes = diffEnv({
     original,
-    edited: Object.fromEntries(Object.entries(edited).filter(([k, v]) => added.includes(k) || loaded.current[k] !== v)),
+    edited: {
+      ...Object.fromEntries(Object.entries(edited).filter(([k, v]) => loaded.current[k] !== v)),
+      ...Object.fromEntries(added.filter((a) => a.key).map((a) => [a.key, a.value])),
+    },
     removed,
   });
-  const invalid = added.filter((k) => k && !ENV_KEY_RE.test(k) || original.includes(k));
+  const invalid = added.map((a) => a.key).filter((k, i, all) => !k || !ENV_KEY_RE.test(k) || original.includes(k) || all.indexOf(k) !== i);
 
   const save = async () => {
     setSaving(true);
@@ -132,7 +136,10 @@ export function Env({ app, busy, onRedeploy }: { app: string; busy: boolean; onR
     if (fromReveal && loaded.current[k] === undefined) loaded.current[k] = v;
     setEdited((m) => ({ ...m, [k]: v }));
   };
-  const rows = [...original.filter((k) => !removed.includes(k)), ...added];
+  const rows: { id: string; k: string; add?: number }[] = [
+    ...original.filter((k) => !removed.includes(k)).map((k) => ({ id: "o:" + k, k })),
+    ...added.map((a) => ({ id: "n:" + a.id, k: a.key, add: a.id })),
+  ];
 
   return (
     <Card title="Variables d'environnement" right={<Refreshing on={r.refreshing} />}>
@@ -141,24 +148,23 @@ export function Env({ app, busy, onRedeploy }: { app: string; busy: boolean; onR
           <>
             {!rows.length && <div className="empty"><p>Aucune variable définie.</p></div>}
             <div className="env-grid">
-              {rows.map((k) => {
-                const isNew = added.includes(k);
+              {rows.map(({ id, k, add }) => {
+                const nw = add !== undefined ? added.find((a) => a.id === add) : undefined;
                 const meta = r.data?.find((e) => e.key === k);
                 return (
-                  <div className="env-row" key={k + (isNew ? "+" : "")}>
-                    {isNew ? <input className="mono key" placeholder="NOM" value={k} onChange={(e) => {
-                      const nk = e.target.value; setAdded((a) => a.map((x) => (x === k ? nk : x)));
-                      setEdited((m) => { const { [k]: v, ...rest } = m; return { ...rest, [nk]: v ?? "" }; });
+                  <div className="env-row" key={id}>
+                    {nw ? <input className="mono key" placeholder="NOM" value={nw.key} onChange={(e) => {
+                      const nk = e.target.value; setAdded((a) => a.map((x) => (x.id === nw.id ? { ...x, key: nk } : x)));
                     }} /> : <span className="mono key">{k}</span>}
-                    {isNew ? <input className="mono" placeholder="valeur" value={edited[k] ?? ""} onChange={(e) => setVal(k, e.target.value)} />
+                    {nw ? <input className="mono" placeholder="valeur" value={nw.value} onChange={(e) => { const v = e.target.value; setAdded((a) => a.map((x) => (x.id === nw.id ? { ...x, value: v } : x))); }} />
                       : <EnvValue app={app} k={k} sensitive={!!meta?.sensitive} edited={edited[k]} onEdit={(v) => setVal(k, v, edited[k] === undefined)} />}
-                    <button className="ghost danger-text" title="Supprimer" onClick={() => isNew ? setAdded((a) => a.filter((x) => x !== k)) : setRemoved((l) => [...l, k])}>✕</button>
+                    <button className="ghost danger-text" title="Supprimer" onClick={() => nw ? setAdded((a) => a.filter((x) => x.id !== nw.id)) : setRemoved((l) => [...l, k])}>✕</button>
                   </div>
                 );
               })}
             </div>
             <div className="toolbar">
-              <button onClick={() => setAdded((a) => [...a, ""])}>+ Variable</button>
+              <button onClick={() => setAdded((a) => [...a, { id: nextId.current++, key: "", value: "" }])}>+ Variable</button>
               <span className="grow" />
               {changes.length > 0 && <button className="ghost" onClick={() => { setEdited({}); setRemoved([]); setAdded([]); }}>Annuler les changements</button>}
               <button className="primary" disabled={!changes.length || busy || saving || invalid.length > 0} onClick={() => setConfirm(true)}>

@@ -171,7 +171,7 @@ async function route(req, res) {
   }
   if (sub === "logs") {
     res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache" });
-    const p = execFile("docker", ["compose", "logs", "-f", "--tail", "200", "--no-color"], { cwd: appDir(name) });
+    const p = spawn("docker", ["compose", "logs", "-f", "--tail", "200", "--no-color"], { cwd: appDir(name) });
     const send = (c) => String(c).split("\n").filter(Boolean).forEach((l) => res.write(`data: ${l}\n\n`));
     p.on("error", (e) => { res.write(`data: error: ${e.message}\n\n`); res.end(); });
     p.stdout.on("data", send); p.stderr.on("data", send);
