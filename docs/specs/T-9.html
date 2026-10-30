@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>T-9 — Déployer Trema depuis son propre dossier</title>
+<style>
+  :root{color-scheme:light}
+  *{box-sizing:border-box}
+  body{margin:0;font:15px/1.55 Inter,-apple-system,system-ui,sans-serif;background:#f4f1ea;color:#141517}
+  main{max-width:980px;margin:0 auto;padding:32px 22px 80px}
+  .kicker{letter-spacing:.25em;font-size:11px;text-transform:uppercase;color:#565b58}
+  h1{font-size:28px;margin:4px 0 6px}
+  h2{margin:34px 0 10px;font-size:19px;border-bottom:1px solid #d3cec1;padding-bottom:5px}
+  .mut{color:#565b58}
+  code{font-family:ui-monospace,Menlo,monospace;font-size:13px;background:#ebe7dd;padding:1px 5px;border-radius:4px}
+  .note{border-left:3px solid #f15a24;background:#fbf9f4;padding:10px 14px;border-radius:0 8px 8px 0;margin:14px 0}
+  table{border-collapse:collapse;width:100%;font-size:14px}
+  td,th{border-bottom:1px solid #d3cec1;padding:6px 8px;text-align:left;vertical-align:top}
+  th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#565b58}
+  .proto{border:1px solid #d3cec1;border-radius:12px;overflow:hidden;background:#fbf9f4}
+  .tb{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 12px;background:#ebe7dd;border-bottom:1px solid #d3cec1;font-size:12.5px}
+  .tb button{font:inherit;font-size:12.5px;border:1px solid #d3cec1;background:#fbf9f4;color:#141517;border-radius:6px;padding:3px 10px;cursor:pointer}
+  .tb button.on{background:#141517;color:#f4f1ea;border-color:#141517}
+  .tb .sep{width:1px;height:18px;background:#d3cec1;margin:0 4px}
+  .term{background:#141517;color:#e9e6de;font:12.5px/1.6 ui-monospace,Menlo,monospace;padding:14px 16px;min-height:250px;white-space:pre-wrap}
+  .term .p{color:#f15a24}.term .ok{color:#7fc79a}.term .ko{color:#ff7b6b}.term .dim{color:#8a8f8b}
+  .steps{display:flex;gap:6px;flex-wrap:wrap;padding:10px 12px;border-top:1px solid #d3cec1;background:#fff;font-size:12.5px}
+  .st{border:1.3px solid #d3cec1;border-radius:99px;padding:2px 10px;color:#565b58}
+  .st.run{border-color:#f15a24;color:#b93d0d;font-weight:600}
+  .st.done{border-color:#3d8b5a;color:#2d6a44}
+  .st.skip{opacity:.35;text-decoration:line-through}
+  svg.flow text{font:12px Inter,system-ui,sans-serif;fill:#141517}
+  svg.flow .sm{font-size:10.5px;fill:#565b58}
+  svg.flow .b{fill:#fbf9f4;stroke:#d3cec1;stroke-width:1.3}
+  svg.flow .a{fill:#fbf9f4;stroke:#f15a24;stroke-width:1.6}
+  section[data-usine-q]{margin:14px 0}
+</style>
+</head>
+<body>
+<main>
+  <div class="kicker">Usine · trema · T-9 · Spec</div>
+  <h1>Déployer Trema depuis le dossier du repo trema</h1>
+  <p class="mut">La tâche n'a pas de description. Voici comment je la comprends : depuis un checkout du repo <code>trema</code> (le clone principal ou un worktree Usine), <b>une seule commande déploie Trema lui-même</b> sur le VM (UI <a href="https://trema.nicolasm.fr">trema.nicolasm.fr</a>, scripts serveur, templates, hooks), <b>avec le code de ce dossier</b>. Aujourd'hui, ce n'est pas possible.</p>
+
+  <h2>Constat</h2>
+  <table>
+    <tr><th>Problème</th><th>Conséquence</th></tr>
+    <tr><td><code>load_env</code> exige un <code>trema.env</code> dans le dossier courant.</td><td><code>trema ui:install</code>, <code>server:setup</code> et <code>update</code> échouent dans le repo trema (« trema.env not found »). Il faut se placer dans une app pour mettre à jour Trema.</td></tr>
+    <tr><td><code>trema_path</code> utilise <code>which trema</code>.</td><td>On déploie la copie installée dans le <code>PATH</code>, pas le code du dossier courant. Dans un worktree, ce qu'on déploie n'est donc pas ce qu'on vient de modifier.</td></tr>
+    <tr><td><code>trema deploy</code> est appelée mais n'est pas définie.</td><td>La commande « naturelle » ne fait rien et le code est mort.</td></tr>
+    <tr><td><code>update</code> ne recopie le hook que dans l'app courante.</td><td>Les autres apps gardent l'ancien hook.</td></tr>
+  </table>
+
+  <h2>Proposition</h2>
+  <ul>
+    <li>Nouvelle commande (nom : voir Q1) lancée <b>depuis la racine du repo trema</b>, également disponible via <code>npm run deploy</code>.</li>
+    <li><b>Code</b> : celui du dossier où se trouve le script (<code>bin/..</code>), plus celui de <code>which trema</code>. On corrige <code>trema_path</code> pour toutes les commandes.</li>
+    <li><b>Cible</b> : on lit <code>~/.trema_config</code> (hostname / user). Pas besoin de <code>trema.env</code>. Si <code>TREMA_HOSTNAME</code> manque, on affiche un message clair qui renvoie vers <code>trema config:edit --global</code>.</li>
+    <li><b>Étapes</b> (périmètre : Q2) : tests → templates → <code>server:setup</code> → build + installation de l'UI → hooks de toutes les apps → vérification HTTP de l'UI.</li>
+    <li><b>Non interactif</b> si <code>auth.json</code> existe déjà, pour qu'Usine puisse l'exécuter à l'étape « Déploiement ». Sinon : demande du mot de passe si on a un TTY, échec explicite sinon.</li>
+    <li>On s'arrête à la première erreur et on affiche un récapitulatif ✅/❌ par étape. On garde une trace (commit déployé + date) dans <code>~/trema-ui/VERSION</code> sur le VM, et l'UI peut l'afficher.</li>
+  </ul>
+
+  <h2>Prototype — terminal</h2>
+  <p class="mut">Simulation. Choisissez un scénario.</p>
+  <div class="proto">
+    <div class="tb">
+      <b>Scénario</b>
+      <button data-s="before">Aujourd'hui</button>
+      <button data-s="ok" class="on">Proposé — succès</button>
+      <button data-s="fail">Proposé — UI qui échoue</button>
+      <button data-s="noconf">Proposé — pas de config</button>
+      <span class="sep"></span>
+      <button id="replay">▶ Rejouer</button>
+    </div>
+    <div class="term" id="term"></div>
+    <div class="steps" id="steps"></div>
+  </div>
+
+  <h2>Flux</h2>
+  <svg class="flow" viewBox="0 0 940 150" width="100%" role="img" aria-label="Flux de déploiement de Trema">
+    <defs><marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#565b58"/></marker></defs>
+    <rect class="b" x="5" y="40" width="140" height="60" rx="8"/><text x="75" y="64" text-anchor="middle">repo trema</text><text class="sm" x="75" y="82" text-anchor="middle">clone ou worktree</text>
+    <rect class="a" x="170" y="40" width="150" height="60" rx="8"/><text x="245" y="64" text-anchor="middle">trema self:deploy</text><text class="sm" x="245" y="82" text-anchor="middle">~/.trema_config</text>
+    <rect class="b" x="345" y="10" width="130" height="40" rx="8"/><text x="410" y="35" text-anchor="middle">tests</text>
+    <rect class="b" x="345" y="60" width="130" height="40" rx="8"/><text x="410" y="85" text-anchor="middle">build UI (local)</text>
+    <rect class="b" x="500" y="10" width="200" height="40" rx="8"/><text x="600" y="28" text-anchor="middle">rsync templates + server/</text><text class="sm" x="600" y="43" text-anchor="middle">sudo setup.sh</text>
+    <rect class="b" x="500" y="60" width="200" height="40" rx="8"/><text x="600" y="78" text-anchor="middle">rsync UI + systemctl restart</text><text class="sm" x="600" y="93" text-anchor="middle">~/trema-ui · VERSION</text>
+    <rect class="b" x="500" y="110" width="200" height="34" rx="8"/><text x="600" y="132" text-anchor="middle">hooks → repos/* (toutes)</text>
+    <rect class="b" x="725" y="40" width="210" height="60" rx="8"/><text x="830" y="64" text-anchor="middle">check https://trema.&lt;host&gt;</text><text class="sm" x="830" y="82" text-anchor="middle">récap ✅ / ❌</text>
+    <line x1="145" y1="70" x2="168" y2="70" stroke="#565b58" marker-end="url(#ar)"/>
+    <line x1="320" y1="62" x2="343" y2="32" stroke="#565b58" marker-end="url(#ar)"/>
+    <line x1="320" y1="76" x2="343" y2="80" stroke="#565b58" marker-end="url(#ar)"/>
+    <line x1="475" y1="30" x2="498" y2="30" stroke="#565b58" marker-end="url(#ar)"/>
+    <line x1="475" y1="80" x2="498" y2="80" stroke="#565b58" marker-end="url(#ar)"/>
+    <line x1="475" y1="88" x2="498" y2="125" stroke="#565b58" marker-end="url(#ar)"/>
+    <line x1="700" y1="80" x2="723" y2="72" stroke="#565b58" marker-end="url(#ar)"/>
+  </svg>
+
+  <h2>Hors périmètre</h2>
+  <ul class="mut">
+    <li>Déployer Trema par <code>git push</code> (Trema s'auto-hébergeant comme une app) : c'est possible plus tard, mais cela change le modèle (l'UI n'est pas un conteneur).</li>
+    <li>Le rollback automatique de l'UI (on pourra garder <code>~/trema-ui.prev</code> si besoin, voir Q4).</li>
+  </ul>
+
+  <h2>Tests</h2>
+  <p class="mut">Tests bash dans <code>tests/</code> : résolution de <code>trema_path</code> depuis un worktree, config globale sans <code>trema.env</code>, erreur claire quand la config manque, ordre des étapes et arrêt à la première erreur (<code>ssh</code>/<code>rsync</code> simulés).</p>
+
+  <h2>Questions ouvertes</h2>
+
+  <section data-usine-q="Q1" data-kind="single" data-label="Quel nom pour la commande ?" data-reco="b">
+    <div data-option="a"><code>trema deploy</code> : réutilise le nom existant (non défini). Dans le repo trema, il déploie Trema.</div>
+    <div data-option="b"><code>trema self:deploy</code> : nom explicite, sans ambiguïté avec le déploiement d'une app (qui reste <code>git push trema main</code>), + <code>npm run deploy</code>. On supprime l'entrée <code>deploy</code> morte.</div>
+    <div data-option="c">Seulement <code>npm run deploy</code> (script dans package.json), sans nouvelle commande <code>trema</code>.</div>
+  </section>
+
+  <section data-usine-q="Q2" data-kind="multi" data-label="Que doit déployer la commande ?" data-reco="ui,server,templates,hooks">
+    <div data-option="ui">L'UI (build local, rsync, restart systemd, vhost nginx si besoin)</div>
+    <div data-option="server">Les scripts serveur (<code>server:setup</code>, sudo)</div>
+    <div data-option="templates">Les templates Docker (<code>docker_compose_files</code>)</div>
+    <div data-option="hooks">Le hook <code>post-receive</code> dans <b>toutes</b> les apps du VM</div>
+  </section>
+
+  <section data-usine-q="Q3" data-kind="single" data-label="Lancer les tests (npm test) avant de déployer ?" data-reco="a">
+    <div data-option="a">Oui, et on bloque si un test échoue (<code>--skip-tests</code> pour forcer)</div>
+    <div data-option="b">Non, c'est le rôle de la CI ou d'Usine</div>
+  </section>
+
+  <section data-usine-q="Q4" data-kind="single" data-label="Garder la version précédente de l'UI pour pouvoir revenir en arrière ?" data-reco="b">
+    <div data-option="a">Oui : <code>~/trema-ui.prev</code> + <code>trema self:rollback</code></div>
+    <div data-option="b">Non pour l'instant : on redéploie simplement le commit précédent</div>
+  </section>
+
+  <section data-usine-q="Q5" data-kind="single" data-label="Faut-il autoriser le déploiement depuis une branche autre que main ou un worktree non commité ?" data-reco="b">
+    <div data-option="a">Non : refuser si la branche n'est pas main ou si le dépôt n'est pas propre</div>
+    <div data-option="b">Oui, mais avec un avertissement (branche + « dirty ») et le commit noté dans VERSION</div>
+  </section>
+</main>
+
+<script>
+(function(){
+  var STEPS=["tests","templates","server:setup","build UI","install UI","hooks (3 apps)","check HTTPS"];
+  var SC={
+    before:{lines:[
+      ['p','~/code/trema (main) $ trema ui:install'],
+      ['ko','Error: trema.env not found'],
+      ['p','~/code/trema (main) $ trema deploy'],
+      ['ko','bin/trema: line 259: deploy: command not found'],
+      ['dim','# Contournement : cd ~/code/mon-app && trema ui:install'],
+      ['dim','# … qui déploie le trema du PATH, pas ce dossier.']
+    ],res:[]},
+    ok:{lines:[
+      ['p','~/.usine/worktrees/trema/T-9 $ trema self:deploy'],
+      ['dim','→ code : /Users/nicolas/.usine/worktrees/trema/T-9 (usine/T-9, a1b2c3d)'],
+      ['dim','→ cible : nicolas@nicolasm.fr (~/.trema_config)'],
+      ['ok','✅ tests (42 ok)'],['ok','✅ templates synchronisés'],['ok','✅ server:setup'],
+      ['ok','✅ build UI (ui/dist)'],['ok','✅ UI installée, service redémarré'],
+      ['ok','✅ hooks mis à jour : blog, shop, crm'],['ok','✅ https://trema.nicolasm.fr répond 200'],
+      ['','Déployé a1b2c3d en 48 s.']
+    ],res:["done","done","done","done","done","done","done"]},
+    fail:{lines:[
+      ['p','~/code/trema (main) $ npm run deploy'],
+      ['dim','→ cible : nicolas@nicolasm.fr'],
+      ['ok','✅ tests'],['ok','✅ templates synchronisés'],['ok','✅ server:setup'],
+      ['ko','❌ build UI : vite build a échoué (voir ci-dessus)'],
+      ['','Arrêt. Rien n\'a été modifié côté UI ni hooks.']
+    ],res:["done","done","done","run","skip","skip","skip"]},
+    noconf:{lines:[
+      ['p','~/code/trema (main) $ trema self:deploy'],
+      ['ko','❌ Aucune cible : TREMA_HOSTNAME absent de ~/.trema_config'],
+      ['','   Lancez : trema config:edit --global']
+    ],res:["skip","skip","skip","skip","skip","skip","skip"]}
+  };
+  var cur="ok",timer=null;
+  function esc(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}
+  function play(){
+    clearInterval(timer);
+    var sc=SC[cur],t=document.getElementById("term"),st=document.getElementById("steps"),i=0;
+    t.innerHTML="";
+    st.innerHTML=sc.res.length?STEPS.map(function(s,k){return '<span class="st" id="s'+k+'">'+s+'</span>'}).join(""):'<span class="mut">Pas d\'étapes : la commande n\'existe pas.</span>';
+    var okCount=0;
+    timer=setInterval(function(){
+      if(i>=sc.lines.length){clearInterval(timer);
+        sc.res.forEach(function(r,k){document.getElementById("s"+k).className="st "+r});return;}
+      var l=sc.lines[i++];
+      t.innerHTML+='<span class="'+l[0]+'">'+esc(l[1])+'</span>\n';
+      if(l[0]==="ok"&&sc.res.length){var e=document.getElementById("s"+okCount);if(e)e.className="st done";okCount++;var n=document.getElementById("s"+okCount);if(n)n.className="st run";}
+    },380);
+  }
+  document.querySelectorAll("[data-s]").forEach(function(b){b.addEventListener("click",function(){
+    cur=b.dataset.s;document.querySelectorAll("[data-s]").forEach(function(x){x.classList.toggle("on",x===b)});play();
+  })});
+  document.getElementById("replay").addEventListener("click",play);
+  play();
+})();
+</script>
+</body>
+</html>
