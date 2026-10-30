@@ -12,7 +12,9 @@ usage() {
     trema env
     trema migrate
     trema ui
-    trema ui:install
+    trema ui:install      # installs the UI and exposes it on https://trema.<host> (password + TOTP)
+    trema ui:password     # change the password (closes all sessions)
+    trema ui:unexpose     # back to SSH tunnel only
     trema load_pg_dump #pg_dump_file.sql
     trema heroku_pg_dump
     trema config [--global|--help]
@@ -178,12 +180,77 @@ env() {
     do_ssh "cd apps/$TREMA_PROJECT_NAME && vim .env && docker compose --env-file .env up --build --force-recreate -d"
 }
 
+ui_domain() { echo "trema.$TREMA_HOSTNAME"; }
+
+# Reads a password (twice) into UI_PASSWORD.
+ask_ui_password() {
+    local p1 p2
+    read -rsp "UI password (12 characters min.): " p1; echo
+    read -rsp "Confirm: " p2; echo
+    [[ "$p1" == "$p2" ]] || { echo "Passwords differ." >&2; return 1; }
+    [[ ${#p1} -ge 12 ]] || { echo "Password too short." >&2; return 1; }
+    UI_PASSWORD="$p1"
+}
+
+ui_set_password() {
+    local out
+    out=$(printf '%s\n' "$UI_PASSWORD" | do_ssh "node ~/trema-ui/ui/auth-cli.mjs ~/trema-ui/auth.json set-password $(ui_domain)") || return 1
+    echo "$out" | grep '^TOTP_' | sed 's/^/   /'
+    if echo "$out" | grep -q '^TOTP_SECRET='; then
+        echo "   Add this secret in Google Authenticator (\"Enter a setup key\", time-based) or open the URI."
+    fi
+}
+
+ui_nginx_config() {
+    local domain; domain=$(ui_domain)
+    cat <<EOF > tmp-nginx-config
+limit_req_zone \$binary_remote_addr zone=trema_login:1m rate=10r/m;
+server {
+    server_name $domain;
+
+    location = /api/login {
+        limit_req zone=trema_login burst=5 nodelay;
+        proxy_pass http://127.0.0.1:4000;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Forwarded-For \$remote_addr;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+    location / {
+        proxy_pass http://127.0.0.1:4000;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Forwarded-For \$remote_addr;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_buffering off;
+    }
+}
+EOF
+    rsync tmp-nginx-config $TREMA_USERNAME@$TREMA_HOSTNAME:/tmp/trema-ui-nginx && rm tmp-nginx-config
+    do_ssh "sudo mv /tmp/trema-ui-nginx /etc/nginx/sites-enabled/trema-ui && sudo certbot --nginx --non-interactive --domains $domain && sudo systemctl reload nginx"
+}
+
 ui_install() {
     # Build the React bundle locally; the server only receives static files (no node_modules).
     (cd "$(trema_path)/ui/web" && npm install --no-audit --no-fund && npm run build) || { echo "❌ UI build failed"; exit 1; }
     rsync -r --delete --exclude node_modules --exclude web $(trema_path)/ui $(trema_path)/package.json $TREMA_USERNAME@$TREMA_HOSTNAME:trema-ui/
+    if ! do_ssh "test -f ~/trema-ui/auth.json"; then
+        ask_ui_password || exit 1
+        ui_set_password || exit 1
+    fi
     do_ssh "sed -e \"s|__USER__|\$USER|g\" -e \"s|__HOME__|\$HOME|g\" ~/trema-ui/ui/trema-ui.service | sudo tee /etc/systemd/system/trema-ui.service >/dev/null && sudo systemctl daemon-reload && sudo systemctl enable trema-ui && sudo systemctl restart trema-ui"
-    echo "✅ Trema UI installed (systemd, restarts on boot). Open it with 'trema ui'"
+    ui_nginx_config
+    echo "✅ Trema UI installed (systemd, restarts on boot). Open it with 'trema ui' or https://$(ui_domain)"
+}
+
+ui_password() {
+    ask_ui_password || exit 1
+    ui_set_password || exit 1
+    do_ssh "sudo systemctl restart trema-ui"
+    echo "✅ Password changed, all sessions closed"
+}
+
+ui_unexpose() {
+    do_ssh "sudo rm -f /etc/nginx/sites-enabled/trema-ui && sudo systemctl reload nginx && node ~/trema-ui/ui/auth-cli.mjs ~/trema-ui/auth.json remove && sudo systemctl restart trema-ui"
+    echo "✅ Trema UI no longer public (SSH tunnel only). 'trema ui:install' exposes it again."
 }
 
 ui() {
@@ -209,6 +276,8 @@ case "$1" in
     migrate) load_env; migrate ;;
     ui) load_env; ui ;;
     ui:install) load_env; ui_install ;;
+    ui:password) load_env; ui_password ;;
+    ui:unexpose) load_env; ui_unexpose ;;
 
     heroku_pg_dump) load_env; heroku_pg_dump ;;
     archive_db) load_env; archive_db ;;

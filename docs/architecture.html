@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Trema — Architecture</title>
+<style>
+body{font:16px/1.6 system-ui,sans-serif;max-width:920px;margin:0 auto;padding:24px;color:#222}
+h1,h2{line-height:1.25} h2{margin-top:2.2em;border-bottom:1px solid #ddd;padding-bottom:4px}
+code,pre{background:#f4f4f6;border-radius:4px;font-size:.9em} code{padding:1px 5px} pre{padding:12px;overflow:auto}
+table{border-collapse:collapse;width:100%;margin:1em 0} td,th{border:1px solid #ddd;padding:6px 10px;text-align:left;vertical-align:top}
+img{max-width:100%} .tag{display:inline-block;padding:0 8px;border-radius:10px;font-size:.8em;color:#fff}
+.l{background:#3b6fd4}.s{background:#d98a1c}.a{background:#2f9e55}
+.warn{background:#fff4e5;border-left:4px solid #d98a1c;padding:8px 14px}
+#f button{margin:0 6px 8px 0;padding:4px 12px;border:1px solid #bbb;border-radius:14px;background:#fff;cursor:pointer}
+#f button.on{background:#222;color:#fff}
+</style></head><body>
+<h1>Architecture de Trema</h1>
+<p>Trema est un PaaS minimaliste, auto-hébergé, inspiré de Heroku : un <code>git push</code> déploie une app sur votre propre VM. Cette page explique <strong>où vit chaque élément</strong>, ce qui est <strong>centralisé</strong> (partagé) ou <strong>propre à chaque app</strong>, et comment les commandes les relient. Public visé : le mainteneur et toute personne qui voudrait utiliser ou contribuer au projet.</p>
+
+<h2 id="vue">1. Vue d'ensemble</h2>
+<p>Il n'y a ni serveur central, ni base de données Trema : tout est piloté en SSH/rsync depuis le poste local par le script bash <code>bin/trema</code>. L'état vit dans des fichiers et dans Docker.</p>
+<img src="img/zones.svg" alt="Trois zones : poste local, VM partagé, VM par app">
+<p><span class="tag l">local</span> <span class="tag s">VM partagé</span> <span class="tag a">VM par app</span></p>
+
+<h2 id="carte">2. Carte des éléments</h2>
+<div id="f"></div>
+<table id="t"><thead><tr><th>Élément</th><th>Zone</th><th>Chemin</th><th>Créé par</th></tr></thead><tbody></tbody></table>
+<p class="warn"><strong>Copié depuis le central.</strong> Le hook <code>post-receive</code> (copié dans chaque dépôt nu à <code>trema init</code>) et les templates Docker (copiés dans chaque worktree à chaque déploiement) sont des <em>copies</em>. Une copie n'est mise à jour que par <code>trema update</code> (hook) ou au prochain déploiement (templates, à partir de <code>~/docker_compose_files</code>, lui-même mis à jour par <code>update</code>).</p>
+
+<h2 id="flux">3. Flux principaux</h2>
+<h3><code>trema init</code></h3>
+<ol><li>Demande hôte/utilisateur (défauts dans <code>~/.trema_config</code>), écrit <code>trema.env</code>.</li>
+<li>Crée <code>~/repos/&lt;app&gt;</code> (dépôt nu) sur la VM et y copie <code>hooks/</code>.</li>
+<li>Écrit le vhost nginx <code>&lt;app&gt;.&lt;hôte&gt;</code> (les <code>_</code> deviennent <code>-</code>) et obtient le certificat via certbot.</li>
+<li>Ajoute le remote git <code>trema</code>.</li></ol>
+<h3><code>git push trema main</code></h3>
+<img src="img/deploy-flow.svg" alt="Flux de déploiement">
+<ol><li>Le hook extrait le code dans <code>~/apps/&lt;app&gt;</code>.</li>
+<li>Premier déploiement : crée <code>.env</code> (Rails : utilisateur/mot de passe Postgres aléatoires ; app avec son propre <code>docker-compose.yml</code> : copie de <code>.env.example</code>).</li>
+<li>Sans <code>docker-compose.yml</code> dans le dépôt, copie le Dockerfile et le compose Rails + Postgres, puis build, démarre <code>db</code> et joue <code>bin/rails db:prepare</code> ; en cas d'échec, arrêt et ancienne version conservée.</li>
+<li><code>docker compose up --build --force-recreate -d</code>, puis lecture du port publié, écrit dans <code>.env</code> (<code>WEB_PORT</code>) et dans le <code>proxy_pass</code> du vhost, puis redémarrage de nginx.</li>
+<li>Ajoute une ligne (date, commit, durée, résultat) à <code>deploys.log</code>.</li></ol>
+<h3><code>trema env</code> et l'interface</h3>
+<p><code>trema env</code> ouvre <code>.env</code> dans vim sur la VM puis recrée les conteneurs. L'interface web (<code>trema ui:install</code>) est un service systemd Node sans dépendance, écoute sur <code>127.0.0.1:4000</code> ; elle lit les apps, logs, <code>.env</code> et <code>deploys.log</code> et pilote Docker. Accès par tunnel SSH (<code>trema ui</code>) ou HTTPS <code>trema.&lt;hôte&gt;</code> (mot de passe + TOTP).</p>
+<h3><code>trema update</code></h3>
+<p>Recopie <code>docker_compose_files</code>, relance <code>server:setup</code> (rotation des logs Docker, cron de purge de <code>/db_dumps</code>) et recopie le hook de l'app courante. <strong>Les autres apps gardent leur ancien hook</strong> jusqu'à ce qu'on lance <code>update</code> dans chacune.</p>
+<h3><code>trema destroy</code></h3>
+<p>Arrête les conteneurs et supprime le volume de la base, <code>repos/&lt;app&gt;</code>, <code>apps/&lt;app&gt;</code>, <code>envs/&lt;app&gt;.env</code>, le vhost, puis le remote git et <code>trema.env</code> en local. Les dumps de <code>/db_dumps</code> sont conservés (jusqu'à la purge).</p>
+<h3>Base de données</h3>
+<p><code>load_pg_dump</code> envoie un fichier dans <code>/db_dumps</code> (monté dans le conteneur <code>db</code>) et le rejoue ; <code>archive_db</code> fait un <code>pg_dump</code> des données vers <code>data/</code> en local ; <code>heroku_pg_dump</code> récupère les données depuis Heroku.</p>
+
+<h2 id="secu">4. Sécurité</h2>
+<ul><li>L'accès à la VM repose sur SSH (clés) ; Trema ne gère aucun compte.</li>
+<li>Les secrets sont dans <code>apps/&lt;app&gt;/.env</code> sur la VM, jamais dans le dépôt.</li>
+<li>L'interface donne accès au socket Docker et aux secrets : mot de passe haché scrypt, TOTP à usage unique, session 7 jours (cookie <code>HttpOnly; Secure; SameSite=Strict</code>), limite de requêtes nginx sur <code>/api/login</code>, blocage par IP, journal <code>audit.log</code>. <code>trema ui:unexpose</code> la ramène au tunnel SSH seul.</li></ul>
+
+<h2 id="limites">5. Limites (constat)</h2>
+<ul>
+<li>Hook et templates sont des copies : versions potentiellement différentes d'une app à l'autre.</li>
+<li>Une seule VM ; pas de haute disponibilité, pas d'observabilité intégrée, pas de sauvegarde automatique de la base (la purge ne conserve que les derniers dumps).</li>
+<li>Template intégré : Rails 3.4.8 (Puma) + Postgres 18 uniquement ; les autres apps doivent fournir leur <code>docker-compose.yml</code> avec un service <code>web</code> sur le port 3000.</li>
+<li>Le hook et <code>init</code> modifient <code>/etc/nginx</code> et redémarrent nginx : l'utilisateur SSH doit en avoir le droit (en pratique, root).</li>
+<li>Un lien symbolique vers <code>bin/trema</code> n'est pas supporté : la CLI localise <code>trema-config</code> et ses dossiers (hooks, templates, server, ui) à partir de son propre chemin, sans suivre les liens.</li>
+<li>Le nom de l'app est le nom du dossier ; deux apps du même nom entrent en collision.</li>
+<li>Certaines commandes (<code>destroy</code>, <code>deploy</code>) sont incomplètes ou non testées de bout en bout ; <code>deploy</code> est appelée mais non définie.</li>
+</ul>
+
+<h2 id="install">6. Installation</h2>
+<h3>Prérequis</h3>
+<ul><li><strong>VM</strong> Linux (Debian/Ubuntu) avec : Docker + plugin compose, nginx, certbot (plugin nginx), <code>git</code>, <code>rsync</code>, Node.js (pour l'interface), <code>jq</code> (recommandé), <code>sudo</code>.</li>
+<li><strong>DNS</strong> : un enregistrement wildcard <code>*.&lt;hôte&gt;</code> vers la VM (chaque app = un sous-domaine, plus <code>trema.&lt;hôte&gt;</code> pour l'interface).</li>
+<li><strong>Accès SSH</strong> par clé, utilisateur autorisé à utiliser Docker et à écrire dans <code>/etc/nginx/sites-enabled</code>.</li>
+<li><strong>Poste local</strong> : bash, git, ssh, rsync.</li></ul>
+<h3>Étapes</h3>
+<pre>git clone https://github.com/NicolasMarlier/trema.git
+# ajouter le dossier bin/ du clone au PATH (~/.zshrc ou ~/.bashrc) :
+export PATH="$PWD/trema/bin:$PATH"
+
+trema config:edit --global      # TREMA_HOSTNAME et TREMA_USERNAME par défaut
+
+# sur la VM, une fois :
+sudo mkdir -p /db_dumps
+
+# depuis n'importe quel projet git :
+trema init                      # crée dépôt, vhost, certificat, remote, trema.env
+trema update                    # copie les templates, lance server:setup, met à jour le hook
+trema ui:install                # optionnel : interface web
+git push trema main             # déploie</pre>
+<p><code>update</code> et <code>ui:install</code> lisent <code>trema.env</code>, créé par <code>init</code> : lancez <code>init</code> d'abord. Lancez <code>update</code> une fois par app pour que son hook soit à jour ; les templates sont nécessaires au premier <code>git push</code> (template Rails).</p>
+
+<script>
+const rows=[
+["CLI trema","l","bin/trema, bin/trema-config","git clone + PATH"],
+["Config globale","l","~/.trema_config","trema config:edit --global"],
+["Config projet","l","trema.env","trema init"],
+["Remote git","l","git remote « trema »","trema init"],
+["nginx + certbot","s","/etc/nginx/sites-enabled","installation de la VM"],
+["Rotation logs Docker","s","/etc/docker/daemon.json","trema server:setup / update"],
+["Templates Docker","s","~/docker_compose_files","trema update"],
+["Dumps SQL + purge","s","/db_dumps, /etc/cron.d/trema-prune-dumps","mkdir manuel + server:setup"],
+["Interface web","s","~/trema-ui, trema-ui.service, vhost trema.<hôte>","trema ui:install"],
+["Dépôt nu","a","~/repos/<app>","trema init"],
+["Hook post-receive","a","~/repos/<app>/hooks","trema init / update (copie)"],
+["Worktree","a","~/apps/<app>","git push (hook)"],
+["Dockerfile + compose","a","~/apps/<app>/Dockerfile, docker-compose.yml","hook (copie des templates)"],
+["Secrets","a","~/apps/<app>/.env","hook, puis trema env"],
+["Conteneurs et volume","a","<app>-web-1, <app>-db-1, db_data","docker compose (hook)"],
+["Vhost de l'app","a","/etc/nginx/sites-enabled/<sous-domaine>","trema init, port mis à jour par le hook"],
+["Historique","a","~/apps/<app>/deploys.log","hook"]];
+const names={l:"Local",s:"VM partagé",a:"VM par app"};let cur="*";
+const f=document.getElementById("f"),tb=document.querySelector("#t tbody");
+function draw(){f.innerHTML="";[["*","Tous"],["l","Local"],["s","VM partagé"],["a","VM par app"]].forEach(([k,n])=>{const b=document.createElement("button");b.textContent=n;if(k==cur)b.className="on";b.onclick=()=>{cur=k;draw()};f.append(b)});
+tb.innerHTML="";rows.filter(r=>cur=="*"||r[1]==cur).forEach(r=>{const tr=tb.insertRow();[r[0],null,r[2],r[3]].forEach((v,i)=>{const td=tr.insertCell();if(i==1){td.innerHTML='<span class="tag '+r[1]+'">'+names[r[1]]+'</span>'}else if(i==2){const c=document.createElement("code");c.textContent=v;td.append(c)}else td.textContent=v})})}
+draw();
+</script>
+</body></html>

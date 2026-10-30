@@ -1,4 +1,4 @@
-// Trema dashboard server. No dependencies. Binds to 127.0.0.1 only (access via SSH tunnel).
+// Trema dashboard server. No dependencies. Binds to 127.0.0.1 only (SSH tunnel; optional public HTTPS via nginx + login, see auth.mjs).
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
@@ -8,6 +8,7 @@ import os from "node:os";
 import { spawn } from "node:child_process";
 import { isValidAppName, parseEnv, applyEnvPatch, formatDeployLine, parseDeploys, parseDockerPs, appStatus, isSecretKey,
   parseNginxUrl, parseMeminfo, parseDf, parseCpuTimes, cpuPercent } from "./lib.mjs";
+import { verifyPassword, verifyTotp, makeSession, checkSession, parseCookies, createThrottle, formatAudit } from "./auth.mjs";
 
 const HOME = process.env.TREMA_HOME || process.env.HOME;
 const APPS = path.join(HOME, "apps");
@@ -108,11 +109,50 @@ function startJob(name, action, argsList, { logDeploy = false } = {}) {
 }
 
 
-const ALLOWED_HOSTS = new Set([`localhost:${PORT}`, `127.0.0.1:${PORT}`]);
+const LOOPBACK_HOSTS = [`localhost:${PORT}`, `127.0.0.1:${PORT}`];
+const AUTH_FILE = process.env.TREMA_AUTH || path.join(HOME, "trema-ui", "auth.json");
+const AUDIT_FILE = process.env.TREMA_AUDIT || path.join(HOME, "trema-ui", "audit.log");
+const SESSION_COOKIE = "trema_session";
+const throttle = createThrottle();
+const revoked = new Set();
+let lastTotpStep = -1;
+
+const loadAuth = () => {
+  try { const a = JSON.parse(fs.readFileSync(AUTH_FILE, "utf8")); return a.domain && a.hash && a.totp && a.sessionKey ? a : null; } catch { return null; }
+};
+const audit = (ip, event, detail) => {
+  try { fs.appendFileSync(AUDIT_FILE, formatAudit({ date: new Date().toISOString().replace(/\.\d+Z$/, "Z"), ip, event, detail }) + "\n", { mode: 0o600 }); } catch {}
+};
+const clientIp = (req) => String(req.headers["x-forwarded-for"] ?? req.socket.remoteAddress).split(",")[0].trim();
+// Requests through nginx carry X-Forwarded-For; only direct loopback requests (SSH tunnel) skip the login.
+const isTunnel = (req) => LOOPBACK_HOSTS.includes(req.headers.host ?? "") && !req.headers["x-forwarded-for"] && !req.headers["x-forwarded-host"];
+const setCookie = (res, value, maxAge) =>
+  res.setHeader("set-cookie", `${SESSION_COOKIE}=${value}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=${maxAge}`);
+
+async function handleLogin(req, res, auth, ip) {
+  const wait = throttle.wait(ip);
+  if (wait) { audit(ip, "login_blocked"); return json(res, 429, { error: `Trop de tentatives — réessayez dans ${Math.ceil(wait / 1000)} s.` }); }
+  let b = {};
+  try { b = JSON.parse(await readBody(req)); } catch {}
+  const pwOk = verifyPassword(b.password, auth.hash);
+  const step = verifyTotp(auth.totp, b.code, Date.now(), lastTotpStep);
+  await new Promise((r) => setTimeout(r, 500)); // server-side delay
+  if (!pwOk || step === null) {
+    throttle.fail(ip); audit(ip, "login_failed");
+    return json(res, 401, { error: "Identifiants incorrects." });
+  }
+  lastTotpStep = step; throttle.ok(ip); audit(ip, "login_ok");
+  setCookie(res, makeSession(auth.sessionKey), 7 * 24 * 3600);
+  return json(res, 200, { ok: true });
+}
 
 async function route(req, res) {
-  // Anti DNS-rebinding: only accept our loopback Host.
+  const auth = loadAuth();
+  const ALLOWED_HOSTS = new Set(auth ? [...LOOPBACK_HOSTS, auth.domain] : LOOPBACK_HOSTS);
+  // Anti DNS-rebinding: only accept loopback or the configured public domain as Host.
   if (!ALLOWED_HOSTS.has(req.headers.host ?? "")) return json(res, 403, { error: "forbidden host" });
+  const tunnel = isTunnel(req);
+  const ip = tunnel ? "tunnel" : clientIp(req);
   // Anti CSRF: mutating requests must be JSON (forces a CORS preflight) and not cross-site.
   if (req.method !== "GET" && req.method !== "HEAD") {
     const origin = req.headers.origin;
@@ -120,9 +160,29 @@ async function route(req, res) {
     if (!String(req.headers["content-type"] ?? "").startsWith("application/json") || req.headers["x-trema"] !== "1")
       return json(res, 403, { error: "missing headers" });
   }
+  let session = null;
+  if (!tunnel) {
+    if (!auth || req.headers.host !== auth.domain) return json(res, 403, { error: "forbidden host" });
+    session = checkSession(auth.sessionKey, parseCookies(req.headers.cookie)[SESSION_COOKIE]);
+    if (session && revoked.has(session.id)) session = null;
+    if (session?.renew) setCookie(res, makeSession(auth.sessionKey, Date.now(), session.id), 7 * 24 * 3600);
+    const u = new URL(req.url, "http://x").pathname;
+    if (u === "/api/login" && req.method === "POST") return handleLogin(req, res, auth, ip);
+    if (u === "/api/logout" && req.method === "POST") {
+      if (session) revoked.add(session.id);
+      audit(ip, "logout"); setCookie(res, "", 0);
+      return json(res, 200, { ok: true });
+    }
+    if (!session) {
+      if (u === "/" || u === "/login.html") return serveLogin(res);
+      return json(res, 401, { error: "unauthorized" });
+    }
+  }
   const url = new URL(req.url, "http://x");
+  if (req.method !== "GET" && req.method !== "HEAD") audit(ip, "action", `${req.method} ${url.pathname}`);
   const parts = url.pathname.split("/").filter(Boolean);
   if (parts[0] !== "api") return serveStatic(url.pathname, res);
+  if (parts[1] === "me") return json(res, 200, { public: !tunnel });
   if (parts[1] === "apps" && parts.length === 2) return json(res, 200, { dockerOk: cache.dockerOk !== false, apps: listApps() });
   if (parts[1] === "system" && parts.length === 2) return json(res, 200, { ...cache.system, hostname: os.hostname(), at: cache.at, dockerOk: cache.dockerOk !== false });
   if (parts[1] === "jobs" && parts[2]) {
@@ -187,6 +247,11 @@ async function route(req, res) {
 }
 
 const MIME = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".json": "application/json", ".map": "application/json" };
+function serveLogin(res) {
+  res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+  fs.createReadStream(path.join(path.dirname(fileURLToPath(import.meta.url)), "public", "login.html")).pipe(res);
+}
+
 function serveStatic(p, res) {
   let f = path.join(PUBLIC, p === "/" ? "index.html" : path.normalize(p));
   if (!f.startsWith(PUBLIC)) { res.writeHead(404); return res.end("not found"); }

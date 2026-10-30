@@ -19,7 +19,7 @@ function useRoute(): [Route, (r: Route) => void] {
   return [route, (r) => { location.hash = buildHash(r); }];
 }
 
-function Sidebar({ apps, selected, onSelect, system, hostname }: { apps: ReturnType<typeof useResource<AppsResponse>>; selected: string | null; onSelect: (n: string) => void; system: System | undefined; hostname?: string }) {
+function Sidebar({ apps, selected, onSelect, system, hostname, isPublic }: { apps: ReturnType<typeof useResource<AppsResponse>>; selected: string | null; onSelect: (n: string) => void; system: System | undefined; hostname?: string; isPublic?: boolean }) {
   return (
     <nav>
       <div className="brand">▲ Trema<small>{hostname ?? ""}</small></div>
@@ -44,6 +44,9 @@ function Sidebar({ apps, selected, onSelect, system, hostname }: { apps: ReturnT
           </>
         ) : <div className="stack"><Skeleton h={22} /><Skeleton h={22} /><Skeleton h={22} /></div>}
       </div>
+      {isPublic && (
+        <button className="app-item" onClick={async () => { await api("logout", { method: "POST" }).catch(() => {}); location.reload(); }}>Déconnexion</button>
+      )}
     </nav>
   );
 }
@@ -53,6 +56,7 @@ export function App() {
   const [route, go] = useRoute();
   const apps = useResource<AppsResponse>("apps", () => api("apps"), 10_000);
   const sys = useResource<System>("system", () => api("system"), 10_000);
+  const me = useResource<{ public: boolean }>("me", () => api("me"));
   const { jobs, track, restore, dismiss } = useJobs((j) => {
     toast(j.state === "ok" ? "ok" : "error", `${j.app} : ${j.action} ${j.state === "ok" ? "terminé" : "échoué"}`);
     apps.reload();
@@ -81,7 +85,7 @@ export function App() {
 
   return (
     <div className="shell">
-      <Sidebar apps={apps} selected={route.app} onSelect={(n) => go({ app: n, tab: route.tab })} system={sys.data} hostname={sys.data?.hostname} />
+      <Sidebar apps={apps} selected={route.app} onSelect={(n) => go({ app: n, tab: route.tab })} system={sys.data} hostname={sys.data?.hostname} isPublic={me.data?.public} />
       <main>
         {apps.data && !apps.data.dockerOk && <div className="banner error">Docker est injoignable : les statuts et les stats ne sont pas à jour.</div>}
         {!route.app || !app ? (
