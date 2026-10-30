@@ -179,7 +179,9 @@ env() {
 }
 
 ui_install() {
-    rsync -r --delete $(trema_path)/ui $(trema_path)/package.json $TREMA_USERNAME@$TREMA_HOSTNAME:trema-ui/
+    # Build the React bundle locally; the server only receives static files (no node_modules).
+    (cd "$(trema_path)/ui/web" && npm install --no-audit --no-fund && npm run build) || { echo "❌ UI build failed"; exit 1; }
+    rsync -r --delete --exclude node_modules --exclude web $(trema_path)/ui $(trema_path)/package.json $TREMA_USERNAME@$TREMA_HOSTNAME:trema-ui/
     do_ssh "sed -e \"s|__USER__|\$USER|g\" -e \"s|__HOME__|\$HOME|g\" ~/trema-ui/ui/trema-ui.service | sudo tee /etc/systemd/system/trema-ui.service >/dev/null && sudo systemctl daemon-reload && sudo systemctl enable trema-ui && sudo systemctl restart trema-ui"
     echo "✅ Trema UI installed (systemd, restarts on boot). Open it with 'trema ui'"
 }

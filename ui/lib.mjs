@@ -85,9 +85,11 @@ export function maskEntries(entries) {
   return entries.map(({ key }) => ({ key, masked: true }));
 }
 
-/** deploys.log line format: ISO_DATE<TAB>COMMIT<TAB>DURATION_S<TAB>ok|failed */
-export function formatDeployLine({ date, commit, duration, result }) {
-  return [date, commit, duration, result].join("\t");
+/** deploys.log line format: ISO_DATE<TAB>COMMIT<TAB>DURATION_S<TAB>ok|failed[<TAB>MESSAGE] (message optional, legacy lines have 4 columns) */
+export function formatDeployLine({ date, commit, duration, result, message }) {
+  const cols = [date, commit, duration, result];
+  if (message) cols.push(String(message).replace(/[\t\r\n]+/g, " ").slice(0, 200));
+  return cols.join("\t");
 }
 
 export function parseDeploys(text) {
@@ -95,11 +97,59 @@ export function parseDeploys(text) {
     .split("\n")
     .filter(Boolean)
     .map((l) => {
-      const [date, commit, duration, result] = l.split("\t");
-      return { date, commit, duration: Number(duration), result };
+      const [date, commit, duration, result, ...rest] = l.split("\t");
+      return { date, commit, duration: Number(duration), result, message: rest.join(" ") || null };
     })
     .filter((d) => d.date && d.commit && (d.result === "ok" || d.result === "failed"))
     .reverse();
+}
+
+/** Apply a {set:{K:V}, unset:[K]} patch to a .env text (comments preserved). Throws on invalid keys/values. */
+export function applyEnvPatch(originalText, patch = {}) {
+  const set = patch.set ?? {};
+  const unset = new Set(patch.unset ?? []);
+  const current = parseEnv(originalText);
+  const map = new Map(current.map((e) => [e.key, e.value]));
+  for (const k of unset) map.delete(k);
+  for (const [k, v] of Object.entries(set)) map.set(k, String(v ?? ""));
+  return mergeEnv(originalText, [...map].map(([key, value]) => ({ key, value })));
+}
+
+/** First server_name of an nginx site config -> https URL (null if none). */
+export function parseNginxUrl(conf) {
+  const m = /^\s*server_name\s+([^;\s]+)/m.exec(String(conf));
+  return m && m[1] !== "_" ? `https://${m[1]}` : null;
+}
+
+/** Parse /proc/meminfo into {total, used} bytes. */
+export function parseMeminfo(text) {
+  const get = (k) => {
+    const m = new RegExp(`^${k}:\\s+(\\d+)`, "m").exec(text);
+    return m ? Number(m[1]) * 1024 : null;
+  };
+  const total = get("MemTotal"), avail = get("MemAvailable");
+  if (total == null || avail == null) return null;
+  return { total, used: total - avail };
+}
+
+/** Parse `df -kP /` output into {total, used} bytes. */
+export function parseDf(text) {
+  const line = String(text).trim().split("\n").pop().trim().split(/\s+/);
+  const total = Number(line[1]) * 1024, used = Number(line[2]) * 1024;
+  return Number.isFinite(total) && Number.isFinite(used) && total > 0 ? { total, used } : null;
+}
+
+/** CPU usage % from two /proc/stat "cpu" lines snapshots. */
+export function parseCpuTimes(text) {
+  const l = /^cpu\s+(.+)$/m.exec(text);
+  if (!l) return null;
+  const n = l[1].trim().split(/\s+/).map(Number);
+  const idle = (n[3] ?? 0) + (n[4] ?? 0);
+  return { idle, total: n.reduce((a, b) => a + b, 0) };
+}
+export function cpuPercent(prev, cur) {
+  if (!prev || !cur || cur.total <= prev.total) return null;
+  return Math.round((1 - (cur.idle - prev.idle) / (cur.total - prev.total)) * 1000) / 10;
 }
 
 /** Map a docker container state to an app status. */

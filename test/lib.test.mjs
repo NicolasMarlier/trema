@@ -54,3 +54,27 @@ test("mergeEnv keeps comments and order", () => {
   const out = l.mergeEnv("# hi\nA=1\n\nB=2\n", [{ key: "B", value: "x y" }, { key: "C", value: "3" }]);
   assert.equal(out, "# hi\n\nB='x y'\nC=3\n");
 });
+
+test("deploys log: optional commit message, legacy lines still parsed", () => {
+  const l1 = "2026-01-01T00:00:00Z\tabc\t5\tok";
+  const l2 = l.formatDeployLine({ date: "2026-01-02T00:00:00Z", commit: "def", duration: 3, result: "ok", message: "fix: a\tb" });
+  const r = l.parseDeploys(l1 + "\n" + l2 + "\n");
+  assert.equal(r[0].message, "fix: a b");
+  assert.equal(r[1].message, null);
+});
+test("applyEnvPatch sets, overrides and unsets while keeping comments", () => {
+  const out = l.applyEnvPatch("# hi\nA=1\nB=2\n", { set: { A: "x y", C: "3" }, unset: ["B"] });
+  assert.equal(out, "# hi\nA='x y'\nC=3\n");
+  assert.throws(() => l.applyEnvPatch("", { set: { "1x": "a" } }));
+});
+test("parseNginxUrl", () => {
+  assert.equal(l.parseNginxUrl("server {\n  server_name blog.example.fr;\n}"), "https://blog.example.fr");
+  assert.equal(l.parseNginxUrl("server { listen 80; }"), null);
+});
+test("system parsers", () => {
+  assert.deepEqual(l.parseMeminfo("MemTotal: 1000 kB\nMemAvailable: 400 kB\n"), { total: 1024000, used: 614400 });
+  assert.deepEqual(l.parseDf("Filesystem 1K-blocks Used Available Use% Mounted\n/dev/x 1000 250 750 25% /"), { total: 1024000, used: 256000 });
+  const a = l.parseCpuTimes("cpu 10 0 10 80 0 0 0 0"), b = l.parseCpuTimes("cpu 30 0 30 140 0 0 0 0");
+  assert.equal(l.cpuPercent(a, b), 40);
+  assert.equal(l.cpuPercent(null, b), null);
+});
