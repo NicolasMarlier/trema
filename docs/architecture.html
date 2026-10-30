@@ -58,6 +58,7 @@ img{max-width:100%} .tag{display:inline-block;padding:0 8px;border-radius:10px;f
 <li>Une seule VM ; pas de haute disponibilité, pas d'observabilité intégrée, pas de sauvegarde automatique de la base (la purge ne conserve que les derniers dumps).</li>
 <li>Template intégré : Rails 3.4.8 (Puma) + Postgres 18 uniquement ; les autres apps doivent fournir leur <code>docker-compose.yml</code> avec un service <code>web</code> sur le port 3000.</li>
 <li>Le hook et <code>init</code> modifient <code>/etc/nginx</code> et redémarrent nginx : l'utilisateur SSH doit en avoir le droit (en pratique, root).</li>
+<li>Un lien symbolique vers <code>bin/trema</code> n'est pas supporté : la CLI localise <code>trema-config</code> et ses dossiers (hooks, templates, server, ui) à partir de son propre chemin, sans suivre les liens.</li>
 <li>Le nom de l'app est le nom du dossier ; deux apps du même nom entrent en collision.</li>
 <li>Certaines commandes (<code>destroy</code>, <code>deploy</code>) sont incomplètes ou non testées de bout en bout ; <code>deploy</code> est appelée mais non définie.</li>
 </ul>
@@ -70,8 +71,8 @@ img{max-width:100%} .tag{display:inline-block;padding:0 8px;border-radius:10px;f
 <li><strong>Poste local</strong> : bash, git, ssh, rsync.</li></ul>
 <h3>Étapes</h3>
 <pre>git clone https://github.com/NicolasMarlier/trema.git
-# mettre bin/ dans le PATH, p. ex. :
-ln -s "$PWD/trema/bin/trema" /usr/local/bin/trema   # le chemin est résolu via `which trema`
+# ajouter le dossier bin/ du clone au PATH (~/.zshrc ou ~/.bashrc) :
+export PATH="$PWD/trema/bin:$PATH"
 
 trema config:edit --global      # TREMA_HOSTNAME et TREMA_USERNAME par défaut
 
