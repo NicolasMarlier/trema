@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>T-4 — Better UI</title>
+<style>
+  :root{color-scheme:light}
+  *{box-sizing:border-box}
+  body{margin:0;font:15px/1.55 Inter,-apple-system,system-ui,sans-serif;background:#f4f1ea;color:#141517}
+  main{max-width:1000px;margin:0 auto;padding:32px 22px 80px}
+  .kicker{letter-spacing:.25em;font-size:11px;text-transform:uppercase;color:#565b58}
+  h1{font-size:28px;margin:4px 0 6px}
+  h2{margin:36px 0 10px;font-size:19px;border-bottom:1px solid #d3cec1;padding-bottom:5px}
+  h3{font-size:15px;margin:18px 0 6px}
+  .mut{color:#565b58}
+  code{font-family:ui-monospace,Menlo,monospace;font-size:13px;background:#ebe7dd;padding:1px 5px;border-radius:4px}
+  table.t{border-collapse:collapse;width:100%;font-size:14px}
+  .t td,.t th{border-bottom:1px solid #d3cec1;padding:6px 8px;text-align:left;vertical-align:top}
+  .t th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#565b58}
+  .note{border-left:3px solid #f15a24;background:#fbf9f4;padding:10px 14px;border-radius:0 8px 8px 0;margin:14px 0}
+  .proto{border:1px solid #d3cec1;border-radius:12px;overflow:hidden;background:#fbf9f4}
+  .tb{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 12px;background:#ebe7dd;border-bottom:1px solid #d3cec1;font-size:12.5px}
+  .tb button{font:inherit;font-size:12.5px;border:1px solid #d3cec1;background:#fbf9f4;color:#141517;border-radius:6px;padding:3px 10px;cursor:pointer}
+  .tb button.on{background:#141517;color:#f4f1ea;border-color:#141517}
+  .tb .sep{flex:1}
+  .legend{padding:10px 14px;font-size:12.5px;color:#565b58;border-top:1px solid #d3cec1}
+
+  /* ---- "avant" : rendu actuel ---- */
+  .old{display:flex;height:500px;font:14px system-ui;background:#fff;color:#1a1d24}
+  .old nav{width:220px;background:#f4f5f8;padding:12px}.old nav button{display:block;width:100%;text-align:left;margin:2px 0}
+  .old .m{flex:1;padding:16px;overflow:auto}.old pre{background:#f4f5f8;padding:8px;max-height:120px;overflow:auto;margin:0}
+  .old h2{font-size:22px;border:0;margin:0 0 8px}.old h3{font-size:16px;margin:12px 0 4px}
+
+  /* ---- prototype "après" ---- */
+  .app{--bg:#f4f1ea;--panel:#fbf9f4;--panel2:#ebe7dd;--line:#d3cec1;--txt:#141517;--mut:#565b58;--acc:#b93d0d;--brand:#f15a24;--ok:#3d8b5a;--ko:#c0392b;--wa:#b7791f;
+       position:relative;background:var(--bg);color:var(--txt);display:flex;font-size:13px;height:500px}
+  .app.dark{--bg:#141517;--panel:#1b1c1f;--panel2:#25272b;--line:#34373b;--txt:#f4f1ea;--mut:#9da1a5;--acc:#f15a24;--ok:#5fbf80;--ko:#e8705f;--wa:#e0a84a}
+  .app aside{width:210px;flex:none;border-right:1px solid var(--line);background:var(--panel);padding:12px;display:flex;flex-direction:column;gap:2px}
+  .logo{font-weight:700;font-size:17px;color:var(--acc);padding:0 8px}
+  .host{font-size:11px;color:var(--mut);padding:0 8px;margin-bottom:10px;font-family:ui-monospace,Menlo,monospace}
+  .sec{margin:8px 0 4px;padding:0 10px;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);display:flex;justify-content:space-between}
+  .nav{display:flex;align-items:center;gap:8px;padding:5px 10px;border-radius:6px;color:var(--mut);cursor:pointer}
+  .nav:hover,.nav.on{background:var(--panel2);color:var(--txt)}
+  .nav small{margin-left:auto;font-size:10.5px}
+  .dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--mut)}
+  .dot.up{background:var(--ok)}.dot.down{background:var(--ko)}.dot.degraded{background:var(--wa)}.dot.busy{background:var(--brand);animation:pulse 1.2s infinite}
+  @keyframes pulse{0%,100%{opacity:.3}50%{opacity:1}}
+  .res{margin-top:auto;font-size:11px;color:var(--mut);padding:0 8px}
+  .bar{height:5px;background:var(--panel2);border-radius:3px;margin:3px 0 8px;overflow:hidden}.bar i{display:block;height:100%;background:var(--brand)}
+  .content{flex:1;display:flex;flex-direction:column;min-width:0}
+  .head{padding:14px 18px 0;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .head h3{margin:0;font-size:18px}
+  .head a{color:var(--acc);font-size:12px;text-decoration:none}
+  .head .act{margin-left:auto;display:flex;gap:6px}
+  .btn{font:inherit;font-size:12px;border:1px solid var(--line);background:var(--panel);color:var(--txt);border-radius:6px;padding:4px 10px;cursor:pointer}
+  .btn:disabled{opacity:.5;cursor:wait}
+  .btn.pri{background:var(--brand);border-color:var(--brand);color:#141517;font-weight:600}
+  .btn.dng{color:var(--ko)}
+  .btn.ghost{border-color:transparent;background:none;color:var(--mut);padding:2px 6px}
+  .tabs{display:flex;gap:2px;padding:10px 18px 0;border-bottom:1px solid var(--line)}
+  .tab{padding:6px 12px;cursor:pointer;color:var(--mut);border-bottom:2px solid transparent;margin-bottom:-1px}
+  .tab.on{color:var(--txt);border-color:var(--brand)}
+  .tab b{font-size:10px;background:var(--brand);color:#141517;border-radius:99px;padding:0 5px;margin-left:4px}
+  .pane{flex:1;overflow:auto;padding:14px 18px;display:flex;flex-direction:column;gap:10px}
+  .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+  .card b{display:block;font-size:17px;margin-top:2px}
+  .card small{color:var(--mut);font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+  .card span{color:var(--mut)}
+  .logbar{display:flex;gap:6px;align-items:center}
+  .logbar input{font:inherit;font-size:12px;flex:1;background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:4px 8px}
+  .log{flex:1;background:#141517;color:#d8d4c9;font:12px/1.5 ui-monospace,Menlo,monospace;border-radius:8px;padding:10px 12px;overflow:auto;white-space:pre-wrap;min-height:0}
+  .log .w{color:#f15a24}.log .e{color:#e8705f}.log mark{background:#f15a24;color:#141517}
+  .kv{width:100%;border-collapse:collapse;font:12px ui-monospace,Menlo,monospace}
+  .kv td,.kv th{border-bottom:1px solid var(--line);padding:5px 6px;text-align:left}
+  .kv th{font:600 11px Inter,system-ui,sans-serif;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}
+  .kv input{font:inherit;width:100%;background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:4px;padding:3px 6px}
+  .kv tr.dirty td:first-child{box-shadow:inset 3px 0 var(--brand)}
+  .kv tr.del td{opacity:.45;text-decoration:line-through}
+  .pill{font-size:11px;border-radius:99px;padding:1px 8px;font-weight:600;white-space:nowrap}
+  .pill.ok,.pill.up{background:color-mix(in srgb,var(--ok) 20%,transparent);color:var(--ok)}
+  .pill.ko,.pill.down{background:color-mix(in srgb,var(--ko) 20%,transparent);color:var(--ko)}
+  .pill.degraded{background:color-mix(in srgb,var(--wa) 20%,transparent);color:var(--wa)}
+  .pill.busy{background:color-mix(in srgb,var(--brand) 20%,transparent);color:var(--acc)}
+  .empty{color:var(--mut);text-align:center;padding:30px}
+  .toast{position:absolute;right:16px;bottom:14px;background:var(--txt);color:var(--bg);padding:7px 12px;border-radius:6px;font-size:12px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:340px}
+  .toast.show{opacity:1}.toast.err{background:var(--ko);color:#fff}
+  .modal{position:absolute;inset:0;background:rgba(20,21,23,.45);display:none;align-items:center;justify-content:center}
+  .modal.show{display:flex}
+  .modal .box{background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:16px 18px;width:340px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+  .modal h4{margin:0 0 8px;font-size:15px}
+  .modal ul{margin:6px 0 12px;padding-left:18px;font:12px ui-monospace,Menlo,monospace}
+  .modal .r{display:flex;justify-content:flex-end;gap:6px}
+  .add{color:#3d8b5a}.rm{color:#c0392b}.chg{color:#b7791f}
+
+  svg.flow text{font:12px Inter,system-ui,sans-serif;fill:#141517}
+  svg.flow .sm{font-size:10.5px;fill:#565b58}
+  svg.flow .b{fill:#fbf9f4;stroke:#d3cec1;stroke-width:1.3}
+  svg.flow .a{fill:#fbf9f4;stroke:#f15a24;stroke-width:1.5}
+  section[data-usine-q]{margin:14px 0}
+</style>
+</head>
+<body>
+<main>
+  <div class="kicker">Usine · trema · T-4 · Spec</div>
+  <h1>Une meilleure interface pour <code>trema ui</code></h1>
+  <p class="mut">Pas de description. Constat : T-3 a livré le tableau de bord fonctionnel (API + <code>ui/public/index.html</code>), mais le front est resté brut — boutons natifs empilés, tout sur une seule page, <code>alert()</code>, aucun retour pendant les actions, statut <code>degraded</code>/<code>unknown</code> non stylé, valeurs d'env envoyées en clair dans des <code>&lt;input type=password&gt;</code>. Je fais l'hypothèse que « Better UI » = <b>amener le vrai front au niveau du prototype validé en T-3</b>, et le rendre agréable à utiliser au quotidien. Pas de nouvelle fonctionnalité métier lourde.</p>
+
+  <h2>Objectifs</h2>
+  <ul>
+    <li><b>Structure</b> : barre latérale (apps + statut) / en-tête d'app (statut, URL, actions) / onglets <i>Vue d'ensemble · Logs · Env · Déploiements</i>. URL avec ancre (<code>#/blog/logs</code>) pour garder sa place au rechargement.</li>
+    <li><b>Retour utilisateur</b> : boutons désactivés + statut « en cours » pendant une action, toasts (succès / erreur) à la place de <code>alert()</code>, confirmation pour les actions destructives (Arrêter, Enregistrer &amp; redéployer).</li>
+    <li><b>Statut vivant</b> : rafraîchissement auto de la liste toutes les ~10 s ; 4 états visibles (en ligne, dégradée, arrêtée, inconnue).</li>
+    <li><b>Logs</b> : terminal sombre, suivi auto / pause, filtre texte, coloration warn/error, vider.</li>
+    <li><b>Env</b> : tableau, valeurs masquées par défaut et révélées à la demande, suppression de variable, lignes modifiées marquées, <b>récapitulatif des changements</b> (ajout / modif / suppression) avant redéploiement.</li>
+    <li><b>Déploiements</b> : tableau, dates relatives (« il y a 2 h »), pastilles réussi / échec, durée lisible.</li>
+    <li><b>Thème</b> : palette Usine, clair/sombre suivant le système (+ bascule), états vides et erreurs (Docker indisponible, app sans conteneur).</li>
+  </ul>
+
+  <h2>Prototype — avant / après</h2>
+  <div class="proto">
+    <div class="tb">
+      <button data-x="before">Avant (actuel)</button>
+      <button data-x="after" class="on">Après</button>
+      <span class="sep"></span>
+      <button data-x="dark">Thème sombre</button>
+      <button data-x="push">Simuler un <code>git push</code> sur « blog »</button>
+      <button data-x="dockerdown">Simuler Docker indisponible</button>
+    </div>
+    <div id="before" class="old" style="display:none">
+      <nav><h3>Trema</h3><button><span style="color:#16a34a">●</span> blog</button><button><span style="color:#16a34a">●</span> shop-api</button><button><span>●</span> worker</button><button><span style="color:#dc2626">●</span> side-project</button></nav>
+      <div class="m"><h2>blog</h2><p>blog-web-1 — CPU 4.01% · 310MiB / 3.8GiB<br>blog-db-1 — CPU 0.12% · 42MiB / 3.8GiB</p>
+        <button>Redémarrer</button> <button>Arrêter</button> <button>Démarrer</button>
+        <h3>Variables d'env</h3><div><input value="RAILS_ENV"> <input type="password" value="production"> <button>👁</button></div><div><input value="POSTGRES_PASSWORD"> <input type="password" value="xxxxxxxx"> <button>👁</button></div>
+        <button>+ variable</button> <button>Enregistrer et redéployer</button>
+        <h3>Déploiements</h3><ul><li>2025-05-02T10:12:03Z a1c3f9e 48s <b style="color:#16a34a">ok</b></li><li>2025-04-28T08:40:11Z c91aa30 61s <b style="color:#dc2626">failed</b></li></ul>
+        <h3>Logs</h3><pre>blog-web-1  | Puma starting in single mode...
+blog-web-1  | * Listening on http://0.0.0.0:3000</pre></div>
+    </div>
+    <div class="app" id="app">
+      <aside>
+        <div class="logo">▲ Trema</div>
+        <div class="host">deploy@vm.example.com</div>
+        <div class="sec"><span>Apps</span><span id="refresh" title="rafraîchi automatiquement">↻ 10 s</span></div>
+        <div id="apps"></div>
+        <div class="res" data-when="Q3=res">
+          CPU 23 %<div class="bar"><i style="width:23%"></i></div>
+          RAM 2,1 / 4 Go<div class="bar"><i style="width:52%"></i></div>
+          Disque 18 / 40 Go<div class="bar"><i style="width:45%"></i></div>
+        </div>
+      </aside>
+      <div class="content">
+        <div class="head" id="head"></div>
+        <div class="tabs" id="tabs"></div>
+        <div class="pane" id="pane"></div>
+      </div>
+      <div class="modal" id="modal"><div class="box" id="mbox"></div></div>
+      <div class="toast" id="toast"></div>
+    </div>
+    <div class="legend">Tout est cliquable : changez d'app et d'onglet, mettez les logs en pause / filtrez, modifiez ou supprimez une variable puis « Enregistrer &amp; redéployer » (récapitulatif), arrêtez une app. La jauge serveur et l'URL d'app n'apparaissent que si vous les cochez en Q3.</div>
+  </div>
+
+  <h2>Parcours « modifier l'env »</h2>
+  <svg class="flow" viewBox="0 0 900 90" width="100%">
+    <defs><marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#565b58"/></marker></defs>
+    <rect class="b" x="10" y="20" width="150" height="50" rx="8"/><text x="85" y="42" text-anchor="middle">Onglet Env</text><text class="sm" x="85" y="58" text-anchor="middle">édite · ajoute · supprime</text>
+    <rect class="b" x="190" y="20" width="150" height="50" rx="8"/><text x="265" y="42" text-anchor="middle">Récapitulatif</text><text class="sm" x="265" y="58" text-anchor="middle">+ ajout · ~ modif · − suppr.</text>
+    <rect class="a" x="370" y="20" width="160" height="50" rx="8"/><text x="450" y="42" text-anchor="middle">PUT /env</text><text class="sm" x="450" y="58" text-anchor="middle">boutons verrouillés, « en cours »</text>
+    <rect class="b" x="560" y="20" width="160" height="50" rx="8"/><text x="640" y="42" text-anchor="middle">Toast</text><text class="sm" x="640" y="58" text-anchor="middle">succès ou erreur détaillée</text>
+    <rect class="b" x="750" y="20" width="140" height="50" rx="8"/><text x="820" y="42" text-anchor="middle">Rafraîchit</text><text class="sm" x="820" y="58" text-anchor="middle">statut + déploiements</text>
+    <line x1="160" y1="45" x2="188" y2="45" stroke="#565b58" marker-end="url(#ar)"/>
+    <line x1="340" y1="45" x2="368" y2="45" stroke="#565b58" marker-end="url(#ar)"/>
+    <line x1="530" y1="45" x2="558" y2="45" stroke="#565b58" marker-end="url(#ar)"/>
+    <line x1="720" y1="45" x2="748" y2="45" stroke="#565b58" marker-end="url(#ar)"/>
+  </svg>
+
+  <h2>Approche technique</h2>
+  <table class="t">
+    <tr><th>Sujet</th><th>Proposition</th></tr>
+    <tr><td>Front</td><td>Reste un fichier statique sans build ni dépendance (cohérent avec <code>trema ui:install</code> = rsync, « sans dépendances »). JS vanilla structuré en petits modules (état, rendu par onglet, API).</td></tr>
+    <tr><td>Logique testée</td><td>Formatage (dates relatives, durées, mémoire), diff d'env (ajout/modif/suppr.), coloration de logs → fonctions pures dans un module partagé, testées avec <code>node --test</code> comme <code>test/lib.test.mjs</code>.</td></tr>
+    <tr><td>API</td><td>Inchangée par défaut. Ajouts optionnels selon Q3/Q4 : URL publique de l'app (lue dans la conf nginx), ressources du VM, message de commit dans <code>deploys.log</code>, masquage des secrets côté serveur.</td></tr>
+    <tr><td>Hors périmètre</td><td>Nouvelles actions (dumps DB, suppression, console), multi-serveurs, graphes historisés.</td></tr>
+  </table>
+
+  <div class="note"><b>Sécurité :</b> aujourd'hui <code>GET /env</code> renvoie toutes les valeurs ; le « masquage » n'est qu'un <code>type=password</code>. <code>lib.mjs</code> contient déjà <code>maskEntries</code>/<code>isSecretKey</code> inutilisés. Je propose d'en profiter (Q4).</div>
+
+  <h2>Questions ouvertes</h2>
+
+  <section data-usine-q="Q1" data-kind="single" data-label="Que recouvre « Better UI » ?" data-reco="a">
+    <div data-option="a">Refonte du front du tableau de bord web (alignement sur le prototype T-3 + ergonomie)</div>
+    <div data-option="b">Autre chose (ex. sortie du CLI <code>trema</code>) — préciser en Q6</div>
+  </section>
+  <p class="mut">Reco : <b>a</b> — c'est l'écart le plus visible entre la spec T-3 et ce qui a été livré.</p>
+
+  <section data-usine-q="Q2" data-kind="single" data-label="Technologie du front ?" data-reco="a">
+    <div data-option="a">JS vanilla, fichier statique, zéro build ni dépendance</div>
+    <div data-option="b">React + Vite (stack préférée), bundle construit en local puis rsync</div>
+  </section>
+  <p class="mut">Reco : <b>a</b> — l'UI reste petite ; une étape de build complique <code>ui:install</code> pour peu de gain.</p>
+
+  <section data-usine-q="Q3" data-kind="multi" data-label="Petits ajouts côté serveur à inclure ?" data-reco="url,commitmsg">
+    <div data-option="url">URL publique de chaque app (lue dans nginx) + lien dans l'en-tête</div>
+    <div data-option="commitmsg">Message de commit dans l'historique (hook <code>post-receive</code>)</div>
+    <div data-option="res">Jauges CPU / RAM / disque du VM dans la barre latérale</div>
+  </section>
+  <p class="mut">Reco : URL + message de commit (petits, très utiles). Les jauges VM relèvent plutôt de l'« Observability » du README.</p>
+
+  <section data-usine-q="Q4" data-kind="single" data-label="Masquer les secrets côté serveur ?" data-reco="a">
+    <div data-option="a">Oui : l'API ne renvoie la valeur qu'à la demande (bouton « Voir »)</div>
+    <div data-option="b">Non, masquage visuel seulement (comme aujourd'hui)</div>
+  </section>
+  <p class="mut">Reco : <b>a</b> — le code existe déjà dans <code>lib.mjs</code>, coût faible.</p>
+
+  <section data-usine-q="Q5" data-kind="single" data-label="Thème ?" data-reco="a">
+    <div data-option="a">Suit le système, avec bascule clair/sombre mémorisée</div>
+    <div data-option="b">Suit le système uniquement</div>
+  </section>
+  <p class="mut">Reco : <b>a</b>.</p>
+
+  <section data-usine-q="Q6" data-kind="text" data-label="Autres irritants concrets à corriger dans l'UI actuelle ?" data-reco="Rien de plus, le périmètre proposé suffit">
+  </section>
+</main>
+
+<script>
+(function(){
+  var S={dark:false,sel:"blog",tab:"overview",reveal:{},paused:false,filter:"",docker:true,busy:{}};
+  var apps={
+    blog:{st:"up",url:"blog.vm.example.com",cpu:"4 %",mem:"310 Mo",ctr:["blog-web-1","blog-db-1"],
+      env:[["RAILS_ENV","production"],["POSTGRES_USER","xKqLmPtRaz"],["POSTGRES_PASSWORD","hJeWbnQoTy"],["SECRET_KEY_BASE","9f2c…e81"]],
+      dep:[["il y a 2 h","a1c3f9e","fix: typo footer","48 s","ok"],["hier","5d02b7c","feat: rss","52 s","ok"],["il y a 4 j","c91aa30","chore: bump rails","1 min 01","ko"],["il y a 6 j","env","variables d'env","40 s","ok"]]},
+    "shop-api":{st:"up",url:"shop-api.vm.example.com",cpu:"11 %",mem:"540 Mo",ctr:["shop-api-web-1"],
+      env:[["NODE_ENV","production"],["DATABASE_URL","postgres://…"],["STRIPE_KEY","sk_live_…"]],
+      dep:[["il y a 3 j","7be012d","feat: webhooks","1 min 10","ok"]]},
+    worker:{st:"degraded",url:"worker.vm.example.com",cpu:"1 %",mem:"120 Mo",ctr:["worker-web-1","worker-jobs-1 (exited)"],
+      env:[["QUEUE","default"]],dep:[["il y a 5 j","3e9a1d0","feat: retries","35 s","ok"]]},
+    "side-project":{st:"down",url:"side-project.vm.example.com",cpu:"—",mem:"—",ctr:["side-project-web-1 (exited)"],
+      env:[["RAILS_ENV","production"]],dep:[]}
+  };
+  var lines=['Started GET "/" for 10.0.0.1','Processing by PostsController#index as HTML','  Rendered posts/index.html.erb (12.4ms)','Completed 200 OK in 31ms','Started GET "/feed.xml" for 10.0.0.7','Completed 200 OK in 8ms','W, Slow query (412ms) SELECT * FROM posts','E, ActionController::RoutingError (No route matches [GET] "/wp-login.php")'];
+  var buf=[],timer=null,draft=null;
+  var $=function(id){return document.getElementById(id)};
+  var answer=function(q){var s=document.querySelector('[data-usine-q="'+q+'"]');return s?(s.getAttribute("data-answer")||s.getAttribute("data-reco")||""):""};
+  var esc=function(s){return String(s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})};
+  function toast(m,err){var t=$("toast");t.textContent=m;t.className="toast show"+(err?" err":"");clearTimeout(t._h);t._h=setTimeout(function(){t.className="toast"},2200)}
+  var LBL={up:"en ligne",down:"arrêtée",degraded:"dégradée",unknown:"inconnue",busy:"en cours…"};
+  function st(k){return S.busy[k]?"busy":apps[k].st}
+  function modal(title,body,ok,cb){
+    $("mbox").innerHTML='<h4>'+title+'</h4>'+body+'<div class="r"><button class="btn" data-m="no">Annuler</button><button class="btn pri" data-m="ok">'+ok+'</button></div>';
+    $("modal").classList.add("show");$("modal")._cb=cb;
+  }
+  function run(k,msg,after){
+    S.busy[k]=true;render();
+    setTimeout(function(){S.busy[k]=false;if(after)after();render();toast("✅ "+k+" — "+msg)},2200);
+  }
+  function envDraft(){if(!draft||draft.app!==S.sel)draft={app:S.sel,rows:apps[S.sel].env.map(function(e){return {k:e[0],v:e[1],o:e[1],del:false,isNew:false}})};return draft}
+  function diff(d){var a=[],c=[],r=[];d.rows.forEach(function(x){if(!x.k)return;if(x.del&&!x.isNew)r.push(x.k);else if(x.isNew&&!x.del)a.push(x.k);else if(!x.del&&x.v!==x.o)c.push(x.k)});return {a:a,c:c,r:r,n:a.length+c.length+r.length}}
+
+  function render(){
+    $("app").classList.toggle("dark",S.dark);
+    var showUrl=answer("Q3").indexOf("url")>=0, showMsg=answer("Q3").indexOf("commitmsg")>=0;
+    if(!S.docker){
+      $("apps").innerHTML='<div class="empty" style="padding:10px;font-size:12px">—</div>';
+      $("head").innerHTML="";$("tabs").innerHTML="";
+      $("pane").innerHTML='<div class="empty"><b style="color:var(--ko)">Docker est injoignable</b><br>Impossible de lire l\'état des conteneurs.<br><small>Nouvelle tentative automatique dans 10 s.</small><br><br><button class="btn" data-x="dockerdown">Réessayer</button></div>';
+      return;
+    }
+    $("apps").innerHTML=Object.keys(apps).map(function(k){return '<div class="nav'+(k===S.sel?" on":"")+'" data-app="'+k+'" title="'+LBL[st(k)]+'"><span class="dot '+st(k)+'"></span>'+k+(apps[k].st==="degraded"?'<small style="color:var(--wa)">1/2</small>':'')+'</div>'}).join("");
+    var a=apps[S.sel],s=st(S.sel),b=!!S.busy[S.sel];
+    $("head").innerHTML='<h3>'+S.sel+'</h3><span class="pill '+s+'">● '+LBL[s]+'</span>'+(showUrl?'<a href="#" onclick="return false">https://'+a.url+' ↗</a>':'')+
+      '<span class="act">'+(a.st==="down"?'<button class="btn" data-do="start"'+(b?" disabled":"")+'>Démarrer</button>':'<button class="btn" data-do="restart"'+(b?" disabled":"")+'>Redémarrer</button><button class="btn dng" data-do="stop"'+(b?" disabled":"")+'>Arrêter</button>')+'</span>';
+    var d=draft&&draft.app===S.sel?diff(draft).n:0;
+    var tabs=[["overview","Vue d'ensemble"],["logs","Logs"],["env","Env"+(d?'<b>'+d+'</b>':'')],["deploys","Déploiements"]];
+    $("tabs").innerHTML=tabs.map(function(t){return '<div class="tab'+(t[0]===S.tab?" on":"")+'" data-tab="'+t[0]+'">'+t[1]+'</div>'}).join("")+'<span style="margin-left:auto;align-self:center;font:11px ui-monospace,Menlo,monospace;color:var(--mut)">#/'+S.sel+'/'+S.tab+'</span>';
+    clearInterval(timer);
+    var p=$("pane");
+    if(S.tab==="overview"){
+      var last=a.dep[0];
+      p.innerHTML='<div class="cards"><div class="card"><small>Dernier déploiement</small>'+(last?'<b>'+last[0]+'</b><span>'+last[1]+(showMsg?' · '+last[2]:'')+'</span>':'<b>—</b><span>jamais déployée</span>')+'</div>'+
+        '<div class="card"><small>CPU · RAM</small><b>'+a.cpu+' · '+a.mem+'</b><span>tous conteneurs</span></div>'+
+        '<div class="card"><small>Conteneurs</small><b>'+a.ctr.filter(function(c){return c.indexOf("exited")<0}).length+' / '+a.ctr.length+'</b><span>en marche</span></div></div>'+
+        '<div style="color:var(--mut)">'+a.ctr.map(function(c){return '<code>'+c+'</code>'}).join(" ")+'</div>'+
+        '<div style="color:var(--mut)">Déployer : <code>git push trema main</code></div>';
+    } else if(S.tab==="logs"){
+      if(a.st==="down"){p.innerHTML='<div class="empty">Conteneurs arrêtés — pas de logs en direct.<br><br><button class="btn" data-do="start">Démarrer '+S.sel+'</button></div>';return}
+      if(!buf.length)buf=lines.slice(0,5);
+      p.innerHTML='<div class="logbar"><input id="flt" placeholder="Filtrer (ex. error, GET /feed)…" value="'+esc(S.filter)+'"><button class="btn" data-log="pause">'+(S.paused?"▶ Reprendre":"⏸ Pause")+'</button><button class="btn" data-log="clear">Vider</button></div><div class="log" id="log"></div>';
+      var paint=function(){var el=$("log");if(!el)return;var f=S.filter.toLowerCase();
+        el.innerHTML=buf.filter(function(l){return !f||l.toLowerCase().indexOf(f)>=0}).map(function(l){var h=esc(a.ctr[0].split(" ")[0]+" | "+l);if(f)h=h.replace(new RegExp(f.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"),"ig"),function(m){return "<mark>"+m+"</mark>"});
+          return /\| W,/.test(l)||l.indexOf("W,")===0?'<span class="w">'+h+'</span>':l.indexOf("E,")===0?'<span class="e">'+h+'</span>':h}).join("\n")||'<span style="color:#9da1a5">Aucune ligne ne correspond.</span>';
+        if(!S.paused)el.scrollTop=1e6};
+      paint();
+      $("flt").oninput=function(){S.filter=this.value;paint()};
+      timer=setInterval(function(){if(S.paused)return;buf.push(lines[Math.floor(Math.random()*lines.length)]);if(buf.length>200)buf.shift();paint()},900);
+    } else if(S.tab==="env"){
+      var dr=envDraft(),df=diff(dr);
+      p.innerHTML='<table class="kv"><tr><th style="width:36%">Clé</th><th>Valeur</th><th style="width:110px"></th></tr>'+dr.rows.map(function(x,i){
+          var shown=S.reveal[S.sel+i]||x.isNew,cls=x.del?"del":(x.isNew||x.v!==x.o)?"dirty":"";
+          return '<tr class="'+cls+'"><td>'+(x.isNew?'<input data-k="'+i+'" value="'+esc(x.k)+'" placeholder="NOUVELLE_CLE">':esc(x.k))+'</td><td>'+(shown?'<input data-v="'+i+'" value="'+esc(x.v)+'">':'<span style="color:var(--mut)">••••••••</span>')+'</td><td style="text-align:right">'+(x.isNew?'':'<button class="btn ghost" data-rev="'+i+'">'+(shown?"Masquer":"Voir")+'</button>')+'<button class="btn ghost" data-del="'+i+'" title="Supprimer">'+(x.del?"↺":"✕")+'</button></td></tr>'}).join("")+'</table>'+
+        '<div style="display:flex;gap:6px;align-items:center"><button class="btn" data-env="add">+ Ajouter</button>'+(df.n?'<button class="btn ghost" data-env="reset">Annuler les modifications</button>':'')+'<span style="flex:1"></span><span style="color:var(--mut);font-size:12px">'+(df.n?df.n+" modification(s) non enregistrée(s)":"Aucune modification")+'</span><button class="btn pri" data-env="save"'+(df.n&&!b?"":" disabled")+'>Enregistrer &amp; redéployer</button></div>';
+      p.querySelectorAll("[data-v]").forEach(function(i){i.oninput=function(){dr.rows[+i.dataset.v].v=i.value;refreshEnvMeta()}});
+      p.querySelectorAll("[data-k]").forEach(function(i){i.oninput=function(){dr.rows[+i.dataset.k].k=i.value.toUpperCase().replace(/[^A-Z0-9_]/g,"");refreshEnvMeta()}});
+    } else {
+      p.innerHTML=a.dep.length?'<table class="kv"><tr><th>Quand</th><th>Commit</th>'+(showMsg?'<th>Message</th>':'')+'<th>Durée</th><th>Résultat</th></tr>'+
+        a.dep.map(function(x){return '<tr><td>'+x[0]+'</td><td>'+(x[1]==="env"?'<span style="color:var(--mut)">⚙ env</span>':x[1])+'</td>'+(showMsg?'<td>'+x[2]+'</td>':'')+'<td>'+x[3]+'</td><td>'+(x[4]==="ok"?'<span class="pill ok">réussi</span>':x[4]==="run"?'<span class="pill busy">en cours</span>':'<span class="pill ko">échec</span>')+'</td></tr>'}).join("")+'</table>'
+        :'<div class="empty">Aucun déploiement pour l\'instant.<br><code>git push trema main</code></div>';
+    }
+  }
+  function refreshEnvMeta(){var f=document.activeElement,id=f&&(f.dataset.v||f.dataset.k),attr=f&&f.dataset.v!==undefined?"v":"k",pos=f&&f.selectionStart;render();if(id!==undefined){var n=document.querySelector('[data-'+attr+'="'+id+'"]');if(n){n.focus();try{n.setSelectionRange(pos,pos)}catch(e){}}}}
+
+  document.addEventListener("click",function(e){
+    var t=e.target.closest("[data-app],[data-tab],[data-do],[data-rev],[data-del],[data-env],[data-log],[data-m],[data-x]");if(!t)return;
+    var k=S.sel,a=apps[k];
+    if(t.dataset.x){
+      var x=t.dataset.x;
+      if(x==="before"||x==="after"){$("before").style.display=x==="before"?"flex":"none";$("app").style.display=x==="after"?"flex":"none";document.querySelectorAll('[data-x="before"],[data-x="after"]').forEach(function(b){b.classList.toggle("on",b.dataset.x===x)});return}
+      if(x==="dark"){S.dark=!S.dark;t.classList.toggle("on",S.dark)}
+      if(x==="dockerdown"){S.docker=!S.docker;document.querySelector('.tb [data-x="dockerdown"]').classList.toggle("on",!S.docker)}
+      if(x==="push"){apps.blog.dep.unshift(["à l'instant","e44b81d","feat: dark mode","…","run"]);run("blog","déployée (e44b81d)",function(){apps.blog.dep[0]=["à l'instant","e44b81d","feat: dark mode","45 s","ok"]});return}
+    }
+    else if(t.dataset.app){S.sel=t.dataset.app;buf=[];S.filter=""}
+    else if(t.dataset.tab){S.tab=t.dataset.tab}
+    else if(t.dataset.rev){S.reveal[k+t.dataset.rev]=!S.reveal[k+t.dataset.rev]}
+    else if(t.dataset.del){var r=envDraft().rows[+t.dataset.del];if(r.isNew)envDraft().rows.splice(+t.dataset.del,1);else r.del=!r.del}
+    else if(t.dataset.log){if(t.dataset.log==="pause")S.paused=!S.paused;else buf=[]}
+    else if(t.dataset.env==="add"){envDraft().rows.push({k:"",v:"",o:"",del:false,isNew:true})}
+    else if(t.dataset.env==="reset"){draft=null}
+    else if(t.dataset.env==="save"){
+      var df=diff(envDraft()),li=function(arr,c,s){return arr.map(function(n){return '<li class="'+c+'">'+s+' '+esc(n)+'</li>'}).join("")};
+      modal("Redéployer "+k+" ?",'<div style="color:var(--mut);font-size:12.5px">Le fichier <code>.env</code> sera réécrit puis les conteneurs reconstruits (~45 s).</div><ul>'+li(df.a,"add","+")+li(df.c,"chg","~")+li(df.r,"rm","−")+'</ul>',"Enregistrer &amp; redéployer",function(){
+        var d=envDraft();apps[k].env=d.rows.filter(function(x){return x.k&&!x.del}).map(function(x){return [x.k,x.v]});draft=null;S.reveal={};
+        run(k,"redéployée avec la nouvelle config",function(){apps[k].dep.unshift(["à l'instant","env","variables d'env","42 s","ok"])})});return}
+    else if(t.dataset.do==="stop"){modal("Arrêter "+k+" ?",'<p style="color:var(--mut);font-size:12.5px">L\'app ne répondra plus jusqu\'au prochain démarrage.</p>',"Arrêter",function(){run(k,"arrêtée",function(){a.st="down"})});return}
+    else if(t.dataset.do==="restart"){run(k,"redémarrée");return}
+    else if(t.dataset.do==="start"){run(k,"démarrée",function(){a.st="up"});return}
+    else if(t.dataset.m){$("modal").classList.remove("show");if(t.dataset.m==="ok"&&$("modal")._cb)$("modal")._cb();return}
+    render();
+  });
+  // re-render when Usine answers change (data-when / options)
+  document.addEventListener("change",function(e){if(e.target.closest&&e.target.closest("[data-usine-q]"))setTimeout(render,0)});
+  render();
+})();
+</script>
+</body>
+</html>
