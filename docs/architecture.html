@@ -79,11 +79,11 @@ trema config:edit --global      # TREMA_HOSTNAME et TREMA_USERNAME par défaut
 sudo mkdir -p /db_dumps
 
 # depuis n'importe quel projet git :
-trema update                    # copie les templates et lance server:setup
+trema init                      # crée dépôt, vhost, certificat, remote, trema.env
+trema update                    # copie les templates, lance server:setup, met à jour le hook
 trema ui:install                # optionnel : interface web
-trema init                      # crée dépôt, vhost, certificat, remote
 git push trema main             # déploie</pre>
-<p>Si <code>trema update</code> s'arrête faute de <code>trema.env</code>, lancez d'abord <code>trema init</code> (qui nécessite déjà <code>~/docker_compose_files</code> au premier déploiement : copiez-le avec <code>rsync -r docker_compose_files &lt;user&gt;@&lt;hôte&gt;:</code>). Cette chaîne de dépendances est un point à simplifier.</p>
+<p><code>update</code> et <code>ui:install</code> lisent <code>trema.env</code>, créé par <code>init</code> : lancez <code>init</code> d'abord. Lancez <code>update</code> une fois par app pour que son hook soit à jour ; les templates sont nécessaires au premier <code>git push</code> (template Rails).</p>
 
 <script>
 const rows=[
