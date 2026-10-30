@@ -229,7 +229,9 @@ EOF
 }
 
 ui_install() {
-    rsync -r --delete $(trema_path)/ui $(trema_path)/package.json $TREMA_USERNAME@$TREMA_HOSTNAME:trema-ui/
+    # Build the React bundle locally; the server only receives static files (no node_modules).
+    (cd "$(trema_path)/ui/web" && npm install --no-audit --no-fund && npm run build) || { echo "❌ UI build failed"; exit 1; }
+    rsync -r --delete --exclude node_modules --exclude web $(trema_path)/ui $(trema_path)/package.json $TREMA_USERNAME@$TREMA_HOSTNAME:trema-ui/
     if ! do_ssh "test -f ~/trema-ui/auth.json"; then
         ask_ui_password || exit 1
         ui_set_password || exit 1

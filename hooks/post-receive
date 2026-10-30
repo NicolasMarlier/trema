@@ -70,9 +70,9 @@ if [ "$CUSTOM_COMPOSE" = "0" ]; then
     cp $DOCKER_FILES_DIR/ruby_on_rails_postgres.yml $WORK_TREE/docker-compose.yml
 fi
 
-# Append to deploys.log (read by the Trema UI): date<TAB>commit<TAB>duration<TAB>result
+# Append to deploys.log (read by the Trema UI): date<TAB>commit<TAB>duration<TAB>result<TAB>commit message
 log_deploy() {
-    printf '%s\t%s\t%s\t%s\n' "$(date -u +%FT%TZ)" "$(git --git-dir="$REPO_DIR" rev-parse --short HEAD)" "$(( $(date +%s) - DEPLOY_START ))" "$1" >> "$WORK_TREE/deploys.log"
+    printf '%s\t%s\t%s\t%s\t%s\n' "$(date -u +%FT%TZ)" "$(git --git-dir="$REPO_DIR" rev-parse --short HEAD)" "$(( $(date +%s) - DEPLOY_START ))" "$1" "$(git --git-dir="$REPO_DIR" log -1 --format=%s HEAD | tr '\t\r\n' '   ' | cut -c1-200)" >> "$WORK_TREE/deploys.log"
 }
 
 if [ "$CUSTOM_COMPOSE" = "0" ]; then
