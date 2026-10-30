@@ -135,7 +135,13 @@ load_env() {
 }
 
 trema_path() {
-    echo $(dirname $(dirname $(which trema)))
+    # Code of the checkout this script lives in (resolves symlinks), not a PATH copy.
+    local src="${BASH_SOURCE[0]}"
+    while [[ -L "$src" ]]; do
+        local dir; dir="$(cd "$(dirname "$src")" && pwd)"
+        src="$(readlink "$src")"; [[ "$src" == /* ]] || src="$dir/$src"
+    done
+    dirname "$(cd "$(dirname "$src")" && pwd)"
 }
     
 update() {
@@ -260,6 +266,9 @@ ui() {
     ssh -N -L $port:127.0.0.1:$port $TREMA_USERNAME@$TREMA_HOSTNAME
 }
 
+# Allow sourcing (bin/trema-deploy) without running the dispatcher.
+[[ "${BASH_SOURCE[0]}" != "$0" ]] && return 0
+
 case "$1" in
     config) config "$2" ;;
     config:edit) config_edit_cmd "$2" ;;
@@ -270,7 +279,6 @@ case "$1" in
     console) load_env; console ;;
     logs) load_env; shift; logs "$@" ;;
     server:setup) load_env; server_setup ;;  
-    deploy) load_env; deploy ;;
     update) load_env; update ;;
     env) load_env; env ;;
     migrate) load_env; migrate ;;
