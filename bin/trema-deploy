@@ -1,0 +1,66 @@
+#!/bin/bash
+# Deploys Trema itself (UI, server scripts, templates, hooks of all apps) from THIS checkout.
+# Usage: npm run deploy   (from the trema repo; needs ~/.trema_config)
+# Env: TREMA_DEPLOY_DRY_RUN=1  only run the safety checks.
+set -o pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(dirname "$HERE")"
+cd "$ROOT" || exit 1
+source "$HERE/trema-config"
+source "$HERE/trema"
+
+STEPS=()
+step() { # step "label" cmd...
+    local label="$1"; shift
+    echo "▶ $label"
+    if "$@"; then STEPS+=("✅ $label"); else
+        STEPS+=("❌ $label")
+        summary; exit 1
+    fi
+}
+summary() { echo; echo "Summary:"; printf '  %s\n' "${STEPS[@]}"; }
+
+check_config() {
+    [[ -f "$GLOBAL_CONFIG" ]] || { echo "Missing $GLOBAL_CONFIG (run 'trema config:edit --global')" >&2; return 1; }
+    source "$GLOBAL_CONFIG"
+    [[ -n "$TREMA_HOSTNAME" && -n "$TREMA_USERNAME" ]] || { echo "TREMA_HOSTNAME / TREMA_USERNAME missing in $GLOBAL_CONFIG" >&2; return 1; }
+    export TREMA_HOSTNAME TREMA_USERNAME
+}
+
+check_repo() {
+    local branch; branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+    [[ "$branch" == "main" ]] || { echo "Refusing to deploy from branch '$branch' (main only)." >&2; return 1; }
+    [[ -z "$(git status --porcelain)" ]] || { echo "Working tree not clean: commit or stash first." >&2; return 1; }
+}
+
+# Non-interactive ssh (do_ssh uses -t, which breaks when piping/looping).
+ssh_quiet() { ssh "$TREMA_USERNAME@$TREMA_HOSTNAME" "$@"; }
+
+deploy_templates() { rsync -r "$ROOT/docker_compose_files" "$TREMA_USERNAME@$TREMA_HOSTNAME:~"; }
+
+deploy_hooks() {
+    local apps app
+    apps=$(ssh_quiet 'ls -1 repos 2>/dev/null') || return 1
+    for app in $apps; do
+        rsync -r "$ROOT/hooks" "$TREMA_USERNAME@$TREMA_HOSTNAME:repos/$app" || return 1
+        echo "   hook → $app"
+    done
+}
+
+check_https() {
+    local url="https://$(ui_domain)/" code
+    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "$url") || { echo "No response from $url" >&2; return 1; }
+    echo "   $url → HTTP $code"
+    [[ "$code" =~ ^(2|3|401) ]]
+}
+
+step "Config (~/.trema_config)" check_config
+step "Repo is on main and clean" check_repo
+[[ -n "$TREMA_DEPLOY_DRY_RUN" ]] && { summary; exit 0; }
+step "Docker templates" deploy_templates
+step "Server setup" server_setup
+step "UI (build, rsync, systemd, nginx)" ui_install
+step "Hooks of all apps" deploy_hooks
+step "HTTPS check" check_https
+summary
+echo "✅ Trema deployed from $ROOT ($(git rev-parse --short HEAD))"
