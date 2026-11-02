@@ -10,10 +10,8 @@ usage() {
     trema destroy
     trema env
     trema migrate
-    trema ui
     trema ui:install      # installs the UI and exposes it on https://trema.<host> (password + TOTP)
     trema ui:password     # change the password (closes all sessions)
-    trema ui:unexpose     # back to SSH tunnel only
     trema load_pg_dump #pg_dump_file.sql
     trema heroku_pg_dump
     trema config [--help]
@@ -112,7 +110,7 @@ load_app_env() {
     if [[ -z "$TREMA_APP_OVERRIDE" ]]; then
         if [[ "$url" != *:repos/* ]]; then
             echo "Error: no Trema app here (no 'trema' git remote)." >&2
-            echo "Create it in the UI ('trema ui'), or pass --app <name>." >&2
+            echo "Create it in the UI (https://trema.<host>), or pass --app <name>." >&2
             exit 1
         fi
         TREMA_PROJECT_NAME="${url##*:repos/}"; TREMA_PROJECT_NAME="${TREMA_PROJECT_NAME%.git}"
@@ -233,7 +231,7 @@ ui_install() {
     fi
     do_ssh "sed -e \"s|__USER__|\$USER|g\" -e \"s|__HOME__|\$HOME|g\" ~/trema-ui/ui/trema-ui.service | sudo tee /etc/systemd/system/trema-ui.service >/dev/null && sudo systemctl daemon-reload && sudo systemctl enable trema-ui && sudo systemctl restart trema-ui"
     ui_nginx_config
-    echo "✅ Trema UI installed (systemd, restarts on boot). Open it with 'trema ui' or https://$(ui_domain)"
+    echo "✅ Trema UI installed (systemd, restarts on boot). Open https://$(ui_domain)"
 }
 
 ui_password() {
@@ -241,18 +239,6 @@ ui_password() {
     ui_set_password || exit 1
     do_ssh "sudo systemctl restart trema-ui"
     echo "✅ Password changed, all sessions closed"
-}
-
-ui_unexpose() {
-    do_ssh "sudo rm -f /etc/nginx/sites-enabled/trema-ui && sudo systemctl reload nginx && node ~/trema-ui/ui/auth-cli.mjs ~/trema-ui/auth.json remove && sudo systemctl restart trema-ui"
-    echo "✅ Trema UI no longer public (SSH tunnel only). 'trema ui:install' exposes it again."
-}
-
-ui() {
-    local port=4000
-    echo "Trema UI: http://localhost:$port (Ctrl+C to stop)"
-    (sleep 2; open "http://localhost:$port" 2>/dev/null || xdg-open "http://localhost:$port" 2>/dev/null) &
-    ssh -N -L $port:127.0.0.1:$port $TREMA_USERNAME@$TREMA_HOSTNAME
 }
 
 # Allow sourcing (bin/trema-deploy) without running the dispatcher.
@@ -276,10 +262,8 @@ case "$1" in
 
     ssh) load_env; do_ssh ;;
     server:setup) load_env; server_setup ;;
-    ui) load_env; ui ;;
     ui:install) load_env; ui_install ;;
     ui:password) load_env; ui_password ;;
-    ui:unexpose) load_env; ui_unexpose ;;
 
     destroy) load_app_env; destroy ;;
     console) load_app_env; console ;;

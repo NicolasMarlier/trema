@@ -12,7 +12,7 @@ test("POST /api/apps creates a pending app", async () => {
   const sites = path.join(home, "sites"); fs.mkdirSync(sites);
   const port = 4300 + Math.floor(Math.random() * 500);
   const srv = spawn(process.execPath, [path.resolve("ui/server.mjs")], {
-    env: { ...process.env, PORT: String(port), TREMA_HOME: home, TREMA_NGINX_SITES: sites, TREMA_HOST: "ex.fr", PATH: `${bin}:${process.env.PATH}` },
+    env: { ...process.env, PORT: String(port), TREMA_DEV: "1", TREMA_HOME: home, TREMA_NGINX_SITES: sites, TREMA_HOST: "ex.fr", PATH: `${bin}:${process.env.PATH}` },
     stdio: "ignore",
   });
   try {

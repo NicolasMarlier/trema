@@ -1,4 +1,4 @@
-// Trema dashboard server. No dependencies. Binds to 127.0.0.1 only (SSH tunnel; optional public HTTPS via nginx + login, see auth.mjs).
+// Trema dashboard server. No dependencies. Binds to 127.0.0.1 only (public HTTPS via nginx + login; TREMA_DEV=1 skips the login on loopback).
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
@@ -130,8 +130,9 @@ const audit = (ip, event, detail) => {
   try { fs.appendFileSync(AUDIT_FILE, formatAudit({ date: new Date().toISOString().replace(/\.\d+Z$/, "Z"), ip, event, detail }) + "\n", { mode: 0o600 }); } catch {}
 };
 const clientIp = (req) => String(req.headers["x-forwarded-for"] ?? req.socket.remoteAddress).split(",")[0].trim();
-// Requests through nginx carry X-Forwarded-For; only direct loopback requests (SSH tunnel) skip the login.
-const isTunnel = (req) => LOOPBACK_HOSTS.includes(req.headers.host ?? "") && !req.headers["x-forwarded-for"] && !req.headers["x-forwarded-host"];
+// Login is required everywhere, except in explicit dev mode (TREMA_DEV=1) for direct loopback requests (not via nginx).
+const DEV = process.env.TREMA_DEV === "1";
+const isTunnel = (req) => DEV && LOOPBACK_HOSTS.includes(req.headers.host ?? "") && !req.headers["x-forwarded-for"] && !req.headers["x-forwarded-host"];
 const setCookie = (res, value, maxAge) =>
   res.setHeader("set-cookie", `${SESSION_COOKIE}=${value}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=${maxAge}`);
 

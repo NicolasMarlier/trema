@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>T-12 — Retirer la commande « trema ui » (tunnel SSH)</title>
+<style>
+  :root{color-scheme:light}
+  *{box-sizing:border-box}
+  body{margin:0;font:15px/1.55 Inter,-apple-system,system-ui,sans-serif;background:#f4f1ea;color:#141517}
+  main{max-width:1000px;margin:0 auto;padding:32px 22px 80px}
+  .kicker{letter-spacing:.25em;font-size:11px;text-transform:uppercase;color:#565b58}
+  h1{font-size:28px;margin:4px 0 6px}
+  h2{margin:36px 0 10px;font-size:19px;border-bottom:1px solid #d3cec1;padding-bottom:5px}
+  .mut{color:#565b58}
+  code{font-family:ui-monospace,Menlo,monospace;font-size:13px;background:#ebe7dd;padding:1px 5px;border-radius:4px}
+  .note{border-left:3px solid #f15a24;background:#fbf9f4;padding:10px 14px;border-radius:0 8px 8px 0;margin:14px 0}
+  table{border-collapse:collapse;width:100%;font-size:14px}
+  td,th{border-bottom:1px solid #d3cec1;padding:6px 8px;text-align:left;vertical-align:top}
+  th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#565b58}
+  .del{color:#b4321a;text-decoration:line-through}
+  .tag{font-size:11px;padding:1px 8px;border-radius:99px;border:1px solid #d3cec1;background:#fbf9f4;white-space:nowrap}
+  .tag.rm{border-color:#f15a24;color:#b4321a}.tag.kp{color:#2f6b47;border-color:#9cc7ab}.tag.ed{color:#565b58}
+  .proto{border:1px solid #d3cec1;border-radius:12px;overflow:hidden;background:#fbf9f4}
+  .tb{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 12px;background:#ebe7dd;border-bottom:1px solid #d3cec1;font-size:12.5px}
+  .tb button{font:inherit;font-size:12.5px;border:1px solid #d3cec1;background:#fbf9f4;color:#141517;border-radius:6px;padding:3px 10px;cursor:pointer}
+  .tb button.on{background:#141517;color:#f4f1ea;border-color:#141517}
+  .tb .sep{width:1px;height:18px;background:#d3cec1;margin:0 6px}
+  .term{background:#0f1115;color:#e8eaf0;font:12.5px/1.6 ui-monospace,Menlo,monospace;padding:14px 16px;min-height:260px;white-space:pre-wrap}
+  .term .p{color:#6c8cff}.term .m{color:#8f97a8}.term .ok{color:#3ecf8e}.term .ko{color:#f5594e}.term .w{color:#f0b429}
+  .legend{padding:10px 14px;font-size:13px;border-top:1px solid #d3cec1;background:#fff}
+  svg.flow text{font:12px Inter,system-ui,sans-serif;fill:#141517}
+  svg.flow .sm{font-size:10.5px;fill:#565b58}
+  svg.flow .b{fill:#fbf9f4;stroke:#d3cec1;stroke-width:1.3}
+  svg.flow .a{fill:#fbf9f4;stroke:#f15a24;stroke-width:1.5}
+  svg.flow .x{stroke:#b4321a;stroke-width:1.5;stroke-dasharray:5 4;fill:none}
+  svg.flow .l{stroke:#141517;stroke-width:1.3;fill:none}
+  section[data-usine-q]{margin:14px 0}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:760px){.cols{grid-template-columns:1fr}}
+  .card{background:#fbf9f4;border:1px solid #d3cec1;border-radius:10px;padding:10px 14px}
+  .card h3{margin:0 0 6px;font-size:14px}
+</style>
+</head>
+<body>
+<main>
+  <div class="kicker">Usine · trema · T-12 · Spec</div>
+  <h1>Retirer la commande <code>trema ui</code> (tunnel SSH)</h1>
+  <p class="mut">Pas de description. Je lis « Trima UI » comme la commande CLI <code>trema ui</code>. Elle ouvre un tunnel <code>ssh -L 4000</code> puis le navigateur sur <code>http://localhost:4000</code>. Depuis T-7, <code>trema ui:install</code> expose toujours l'interface sur <code>https://trema.&lt;host&gt;</code> (mot de passe + TOTP). La commande ne sert donc plus à rien : on la retire, avec la doc et les messages qui y renvoient. Le tableau de bord lui-même ne change pas.</p>
+
+  <h2>Périmètre proposé</h2>
+  <ul>
+    <li><b>CLI <code>bin/trema</code></b> : on retire la fonction <code>ui()</code>, l'entrée <code>ui)</code> du dispatcher et la ligne <code>trema ui</code> de l'aide. Le message de fin de <code>ui:install</code> n'affiche plus que l'URL HTTPS.</li>
+    <li><b>Docs</b> : dans le README (section « Interface web ») et <code>docs/architecture.html</code>, l'accès se fait par <code>https://trema.&lt;host&gt;</code>. La phrase « Par le tunnel SSH, aucune connexion n'est demandée » est reformulée ou retirée, selon Q2 et Q3.</li>
+    <li><b>Inchangé (reco)</b> : le serveur continue d'écouter sur <code>127.0.0.1:4000</code> derrière nginx. L'accès en boucle locale sans login reste en place, car le dev (<code>npm start</code> + Vite) en a besoin et il sert de secours par <code>ssh -L</code> manuel (Q3). <code>ui:password</code> ne change pas.</li>
+    <li><b>Hors périmètre</b> : toute modification du front React, de l'authentification ou de nginx.</li>
+  </ul>
+
+  <h2>Prototype — le CLI avant / après</h2>
+  <div class="proto">
+    <div class="tb">
+      <button data-v="before">Avant</button><button data-v="after" class="on">Après</button>
+      <span class="sep"></span>
+      <span class="mut">Variante Q1 :</span>
+      <button data-q="a" class="on">a · supprimée</button><button data-q="b">b · ouvre l'URL HTTPS</button>
+      <span class="sep"></span>
+      <button data-c="trema">$ trema</button><button data-c="ui">$ trema ui</button><button data-c="install">$ trema ui:install</button><button data-c="unexpose">$ trema ui:unexpose</button>
+    </div>
+    <div class="term" id="term"></div>
+    <div class="legend" id="lg"></div>
+  </div>
+
+  <h2>Schéma — chemins d'accès</h2>
+  <svg class="flow" viewBox="0 0 900 250" width="100%" role="img" aria-label="Chemins d'accès avant et après">
+    <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="#141517"/></marker>
+    <marker id="arx" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="#b4321a"/></marker></defs>
+    <rect class="b" x="10" y="30" width="180" height="56" rx="8"/><text x="100" y="53" text-anchor="middle">Navigateur (partout)</text><text class="sm" x="100" y="70" text-anchor="middle">https://trema.&lt;host&gt;</text>
+    <rect class="b" x="10" y="160" width="180" height="56" rx="8"/><text x="100" y="183" text-anchor="middle">Poste admin</text><text class="sm" x="100" y="200" text-anchor="middle">trema ui → ssh -L 4000</text>
+    <rect class="b" x="330" y="30" width="190" height="56" rx="8"/><text x="425" y="53" text-anchor="middle">nginx + certbot</text><text class="sm" x="425" y="70" text-anchor="middle">vhost trema-ui, limit_req login</text>
+    <rect class="a" x="660" y="90" width="220" height="70" rx="8"/><text x="770" y="115" text-anchor="middle">trema-ui (systemd)</text><text class="sm" x="770" y="133" text-anchor="middle">127.0.0.1:4000</text><text class="sm" x="770" y="149" text-anchor="middle">login requis si X-Forwarded-For</text>
+    <path class="l" d="M190,58 H330" marker-end="url(#ar)"/><text class="sm" x="200" y="50">HTTPS · mdp + TOTP</text>
+    <path class="l" d="M520,58 C600,58 600,110 660,115" marker-end="url(#ar)"/>
+    <path class="x" d="M190,188 C420,188 560,150 660,140" marker-end="url(#arx)"/>
+    <text class="sm" x="300" y="208" fill="#b4321a">tunnel SSH lancé par « trema ui » : retiré</text>
+    <text class="sm" x="300" y="224">(ssh -L reste possible à la main, et le dev local passe toujours par 127.0.0.1)</text>
+  </svg>
+
+  <h2>Fichiers touchés</h2>
+  <table>
+    <tr><th>Fichier</th><th>Changement</th><th></th></tr>
+    <tr><td><code>bin/trema</code></td><td><span class="del">ui()</span>, <span class="del">ui) load_env; ui ;;</span>, ligne d'aide. Le message de <code>ui:install</code> pointe sur l'URL HTTPS. Le libellé de <code>ui:unexpose</code> dépend de Q2.</td><td><span class="tag rm">retrait</span></td></tr>
+    <tr><td><code>README.md</code></td><td>Titre « Interface web (<code>trema ui</code>) » → « Interface web ». On retire « Ensuite <code>trema ui</code> ouvre le tunnel… » et on adapte la mise en garde « Ne jamais l'exposer publiquement ».</td><td><span class="tag ed">doc</span></td></tr>
+    <tr><td><code>docs/architecture.html</code></td><td>« Accès par tunnel SSH (<code>trema ui</code>) ou HTTPS » devient « Accès HTTPS <code>trema.&lt;hôte&gt;</code> ». La puce sur <code>ui:unexpose</code> dépend de Q2.</td><td><span class="tag ed">doc</span></td></tr>
+    <tr><td><code>ui/server.mjs</code></td><td>Mise à jour du commentaire d'en-tête seulement, si Q3 = a.</td><td><span class="tag kp">inchangé</span></td></tr>
+  </table>
+  <p class="mut">Pas de logique métier modifiée, donc pas de nouveau test. Il faut juste vérifier que <code>npm test</code> passe toujours et que <code>bash -n bin/trema</code> ne signale rien. Les apps déjà déployées n'ont rien à faire.</p>
+
+  <h2>Questions ouvertes</h2>
+
+  <section data-usine-q="Q1" data-kind="single" data-label="Que devient la commande « trema ui » ?" data-reco="a">
+    <div data-option="a">Supprimée purement et simplement (conforme à « get rid of »)</div>
+    <div data-option="b">Gardée comme raccourci : ouvre https://trema.&lt;host&gt; dans le navigateur, sans tunnel</div>
+  </section>
+
+  <section data-when="Q1=a" data-usine-q="Q4" data-kind="single" data-label="Si quelqu'un tape encore « trema ui » ?" data-reco="b">
+    <div data-option="a">Aide générique (comme toute commande inconnue)</div>
+    <div data-option="b">Message dédié : « trema ui a été retirée, ouvrez https://trema.&lt;host&gt; » (code de sortie 1)</div>
+  </section>
+
+  <section data-usine-q="Q2" data-kind="single" data-label="Que faire de « trema ui:unexpose » (retour au tunnel seul) ?" data-reco="a">
+    <div data-option="a">Le garder comme coupe-circuit de sécurité ; documenter l'accès de secours par « ssh -L 4000:127.0.0.1:4000 »</div>
+    <div data-option="b">Le supprimer aussi : l'exposition HTTPS devient le seul mode</div>
+  </section>
+
+  <section data-usine-q="Q3" data-kind="single" data-label="Accès sans login en boucle locale (127.0.0.1 direct) côté serveur ?" data-reco="a">
+    <div data-option="a">On le garde : nécessaire au dev local et à l'accès de secours ; aucun changement serveur</div>
+    <div data-option="b">On le retire : login partout, avec un mode dev explicite (ex. TREMA_DEV=1)</div>
+  </section>
+</main>
+
+<script>
+(function(){
+  var S={v:"after",q:"a",c:"ui"};
+  var H="vm.example.com";
+  var P='<span class="p">~/code/mon-app $</span> ';
+  function usage(after){
+    return '<span class="m">Usage:\n    trema logs [--tail N]\n    trema ssh\n    trema console\n    trema init\n    …\n    trema migrate\n</span>'+
+      (after&&S.q==="a"?'':'    trema ui'+(after?'              <span class="m"># opens https://trema.'+H+'</span>':'')+'\n')+
+      '<span class="m">    trema ui:install      # installs the UI and exposes it on https://trema.&lt;host&gt;\n    trema ui:password     # change the password (closes all sessions)\n    trema ui:unexpose     # '+(after?'removes public access (emergency: ssh -L)':'back to SSH tunnel only')+'\n    …</span>';
+  }
+  var out={
+    trema:function(a){return P+'trema\n'+usage(a)},
+    ui:function(a){
+      if(!a) return P+'trema ui\nTrema UI: http://localhost:4000 (Ctrl+C to stop)\n<span class="m">[ssh -N -L 4000:127.0.0.1:4000 … — le terminal reste bloqué, le navigateur s\'ouvre]</span>';
+      if(S.q==="b") return P+'trema ui\nOpening https://trema.'+H+' …\n<span class="m">[navigateur ouvert, la commande rend la main aussitôt — pas de tunnel]</span>';
+      return P+'trema ui\n<span class="w">trema ui a été retirée : ouvrez https://trema.'+H+'</span>\n<span class="m">(variante Q4=a : affiche simplement l\'aide générique)</span>';
+    },
+    install:function(a){return P+'trema ui:install\n<span class="m">… build Vite, rsync, systemd, nginx, certbot …</span>\n<span class="ok">✅ Trema UI installed (systemd, restarts on boot). '+(a?'':'Open it with \'trema ui\' or ')+'https://trema.'+H+'</span>'+(a?'':'')},
+    unexpose:function(a){return P+'trema ui:unexpose\n<span class="ok">✅ Trema UI no longer public '+(a?'(emergency access: ssh -L 4000:127.0.0.1:4000 '+'user@'+H+'). ':'(SSH tunnel only). ')+'\'trema ui:install\' exposes it again.</span>'+(a?'\n<span class="m">(variante Q2=b : commande supprimée → aide générique)</span>':'')}
+  };
+  var lg={
+    trema:"L'aide n'affiche plus « trema ui » (variante a) ; en variante b, elle le décrit comme un raccourci vers l'URL HTTPS.",
+    ui:"Avant : tunnel bloquant + localhost. Après : rien (a) ou simple ouverture de l'URL publique (b).",
+    install:"Le message de fin ne renvoie plus à « trema ui ».",
+    unexpose:"Selon Q2 : gardé comme coupe-circuit, avec la commande ssh -L de secours indiquée, ou retiré."
+  };
+  var t=document.getElementById("term"),l=document.getElementById("lg");
+  function render(){
+    var a=S.v==="after";
+    t.innerHTML=out[S.c](a);
+    l.textContent=(a?"Après — ":"Avant — ")+lg[S.c];
+    document.querySelectorAll(".tb button").forEach(function(b){
+      b.classList.toggle("on",b.dataset.v===S.v||b.dataset.q===S.q||b.dataset.c===S.c);
+    });
+  }
+  document.querySelector(".tb").addEventListener("click",function(e){
+    var b=e.target.closest("button");if(!b)return;
+    if(b.dataset.v)S.v=b.dataset.v;if(b.dataset.q)S.q=b.dataset.q;if(b.dataset.c)S.c=b.dataset.c;render();
+  });
+  render();
+})();
+</script>
+</body>
+</html>
