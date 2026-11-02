@@ -194,7 +194,7 @@ export function validateNewAppName(name) {
 
 export const subdomainOf = (name) => String(name).replace(/_/g, "-");
 
-/** Same vhost as `trema init` (certbot adds the TLS block). */
+/** Same vhost as the former `trema init` (certbot adds the TLS block). */
 export function nginxVhost(name, host) {
   return `server {\n    server_name ${subdomainOf(name)}.${host};\n\n\tlocation / {\n\t\tproxy_pass http://localhost:3000;\n\t}\n}\n`;
 }
@@ -210,7 +210,6 @@ export function mergeAppNames(repoNames, appNames) {
 export function localCommands(name, user, host) {
   return [
     `git remote add trema ${user}@${host}:repos/${name}`,
-    `printf 'TREMA_HOSTNAME=${host}\\nTREMA_USERNAME=${user}\\nTREMA_PROJECT_NAME=${name}\\n' > trema.env`,
     `git push trema main`,
   ];
 }
