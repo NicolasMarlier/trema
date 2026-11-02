@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node ui/server.mjs",
-    "test": "bash -n hooks/post-receive && bash -n bin/trema && bash -n bin/trema-config && bash tests/run.sh && node --test test/*.test.mjs"
+    "deploy": "bash bin/trema-deploy",
+    "test": "bash -n hooks/post-receive && bash -n bin/trema && bash -n bin/trema-config && bash -n bin/trema-deploy && bash tests/run.sh && node --test test/*.test.mjs"
   }
 }

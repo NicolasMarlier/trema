@@ -29,3 +29,8 @@ Installer sur le VM : `trema ui:install` (construit le front React/Vite en local
 - Protections : limite de requêtes nginx sur `/api/login`, blocage exponentiel par IP côté serveur + délai fixe, code TOTP à usage unique. Journal des connexions et actions : `~/trema-ui/audit.log` (sans valeurs d'env).
 - ⚠️ L'interface donne accès au socket Docker et aux secrets : choisir un mot de passe long, et préférer `ui:unexpose` si l'accès web ne sert pas.
 Le hook `post-receive` écrit `apps/<app>/deploys.log`.
+
+## Déployer Trema lui-même
+
+Depuis le repo trema (branche `main`, arbre propre) : `npm run deploy`.
+Utilise `~/.trema_config` et le code du dossier courant : templates Docker, `server:setup`, build + installation de l'UI, hooks de toutes les apps, vérification HTTPS. Pas de tests lancés (rôle de la CI/Usine) ; s'arrête à la première erreur.
