@@ -110,7 +110,7 @@ load_app_env() {
     if [[ -z "$TREMA_APP_OVERRIDE" ]]; then
         if [[ "$url" != *:repos/* ]]; then
             echo "Error: no Trema app here (no 'trema' git remote)." >&2
-            echo "Create it in the UI ('trema ui'), or pass --app <name>." >&2
+            echo "Create it in the UI (https://trema.<host>), or pass --app <name>." >&2
             exit 1
         fi
         TREMA_PROJECT_NAME="${url##*:repos/}"; TREMA_PROJECT_NAME="${TREMA_PROJECT_NAME%.git}"
