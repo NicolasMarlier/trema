@@ -7,7 +7,8 @@ import { fileURLToPath } from "node:url";
 import os from "node:os";
 import { spawn } from "node:child_process";
 import { isValidAppName, parseEnv, applyEnvPatch, formatDeployLine, parseDeploys, parseDockerPs, appStatus, isSecretKey,
-  parseNginxUrl, parseMeminfo, parseDf, parseCpuTimes, cpuPercent } from "./lib.mjs";
+  parseNginxUrl, parseMeminfo, parseDf, parseCpuTimes, cpuPercent, validateNewAppName, mergeAppNames, localCommands } from "./lib.mjs";
+import { provisionApp } from "./provision.mjs";
 import { verifyPassword, verifyTotp, makeSession, checkSession, parseCookies, createThrottle, formatAudit } from "./auth.mjs";
 
 const HOME = process.env.TREMA_HOME || process.env.HOME;
@@ -62,14 +63,18 @@ function appUrl(name) {
   const sub = name.replace(/_/g, "-");
   return parseNginxUrl(read(path.join(NGINX_SITES, sub)));
 }
-const appNames = () => (fs.existsSync(APPS) ? fs.readdirSync(APPS).filter(isValidAppName) : []);
+const REPOS = path.join(HOME, "repos");
+const HOOKS_DIR = process.env.TREMA_HOOKS || path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "hooks");
+const dirs = (d) => (fs.existsSync(d) ? fs.readdirSync(d).filter(isValidAppName) : []);
+const allApps = () => mergeAppNames(dirs(REPOS), dirs(APPS));
 const containersOf = (name) => cache.ps.filter((c) => c.project === name);
 
 function listApps() {
-  return appNames().map((name) => {
+  return allApps().map(({ name, deployed }) => {
     const cs = containersOf(name);
     const job = lastJob(name);
-    return { name, status: cache.dockerOk === false ? "unknown" : appStatus(cs), busy: job?.state === "running", url: appUrl(name) };
+    const status = !deployed ? "pending" : cache.dockerOk === false ? "unknown" : appStatus(cs);
+    return { name, status, busy: job?.state === "running", url: appUrl(name) };
   });
 }
 
@@ -79,7 +84,7 @@ const lastByApp = new Map();
 const lastJob = (name) => jobs.get(lastByApp.get(name));
 const jobView = (j, withOutput = true) => ({ id: j.id, app: j.app, action: j.action, state: j.state, startedAt: j.startedAt, endedAt: j.endedAt, ...(withOutput ? { output: j.output } : {}) });
 
-function startJob(name, action, argsList, { logDeploy = false } = {}) {
+function startJob(name, action, argsList, { logDeploy = false, task = null } = {}) {
   const running = lastJob(name);
   if (running?.state === "running") return { error: "an action is already running for this app", job: running };
   const job = { id: Math.random().toString(36).slice(2, 10), app: name, action, state: "running", startedAt: Date.now(), endedAt: null, output: "", subs: new Set() };
@@ -88,7 +93,8 @@ function startJob(name, action, argsList, { logDeploy = false } = {}) {
   const push = (c) => { const t = String(c); job.output = (job.output + t).slice(-100_000); emit("out", t); };
   (async () => {
     let ok = true;
-    for (const args of argsList) {
+    if (task) ok = await task(push);
+    else for (const args of argsList) {
       ok = await new Promise((res) => {
         const p = spawn("docker", ["compose", ...args], { cwd: appDir(name) });
         p.stdout.on("data", push); p.stderr.on("data", push);
@@ -98,7 +104,7 @@ function startJob(name, action, argsList, { logDeploy = false } = {}) {
       if (!ok) break;
     }
     job.state = ok ? "ok" : "failed"; job.endedAt = Date.now();
-    if (logDeploy) fs.appendFileSync(path.join(appDir(name), "deploys.log"), formatDeployLine({
+    if (logDeploy && fs.existsSync(appDir(name))) fs.appendFileSync(path.join(appDir(name), "deploys.log"), formatDeployLine({
       date: new Date().toISOString().replace(/\.\d+Z$/, "Z"), commit: "env", duration: Math.round((job.endedAt - job.startedAt) / 1000), result: ok ? "ok" : "failed", message: "Redéploiement (variables d'env)" }) + "\n");
     emit("done", jobView(job, false)); job.subs.forEach((r) => r.end()); job.subs.clear();
     tick();
@@ -146,6 +152,32 @@ async function handleLogin(req, res, auth, ip) {
   return json(res, 200, { ok: true });
 }
 
+function serverHost() {
+  if (process.env.TREMA_HOST) return process.env.TREMA_HOST;
+  const d = loadAuth()?.domain;
+  return d ? d.replace(/^trema\./, "") : os.hostname();
+}
+
+// Creates (or retries) the server side of an app: bare repo, hook, nginx vhost, certificate.
+async function createApp(req, res) {
+  let name;
+  try { name = JSON.parse(await readBody(req)).name; } catch {}
+  const err = validateNewAppName(name);
+  if (err) return json(res, 400, { error: err });
+  const known = allApps().find((a) => a.name === name);
+  if (known?.deployed) return json(res, 409, { error: "Cette app existe déjà." });
+  const run = (push) => (cmd, args) => new Promise((ok) => {
+    const p = spawn(cmd, args);
+    p.stdout.on("data", push); p.stderr.on("data", push);
+    p.on("error", (e) => { push(`error: ${e.message}\n`); ok(false); });
+    p.on("close", (code) => ok(code === 0));
+  });
+  const r = startJob(name, "create", [], {
+    task: (push) => provisionApp({ home: HOME, name, host: serverHost(), nginxSites: NGINX_SITES, hooksDir: HOOKS_DIR, run: run(push), push }),
+  });
+  return r.error ? json(res, 409, { error: r.error, job: jobView(r.job, false) }) : json(res, 202, { job: jobView(r.job, false) });
+}
+
 async function route(req, res) {
   const auth = loadAuth();
   const ALLOWED_HOSTS = new Set(auth ? [...LOOPBACK_HOSTS, auth.domain] : LOOPBACK_HOSTS);
@@ -183,7 +215,7 @@ async function route(req, res) {
   const parts = url.pathname.split("/").filter(Boolean);
   if (parts[0] !== "api") return serveStatic(url.pathname, res);
   if (parts[1] === "me") return json(res, 200, { public: !tunnel });
-  if (parts[1] === "apps" && parts.length === 2) return json(res, 200, { dockerOk: cache.dockerOk !== false, apps: listApps() });
+  if (parts[1] === "apps" && parts.length === 2 && req.method === "GET") return json(res, 200, { dockerOk: cache.dockerOk !== false, apps: listApps() });
   if (parts[1] === "system" && parts.length === 2) return json(res, 200, { ...cache.system, hostname: os.hostname(), at: cache.at, dockerOk: cache.dockerOk !== false });
   if (parts[1] === "jobs" && parts[2]) {
     const job = jobs.get(parts[2]);
@@ -196,10 +228,16 @@ async function route(req, res) {
     return;
   }
   const name = parts[2];
-  if (parts[1] !== "apps" || !isValidAppName(name) || !fs.existsSync(appDir(name))) return json(res, 404, { error: "not found" });
+  if (parts[1] === "apps" && parts.length === 2 && req.method === "POST") return createApp(req, res);
   const sub = parts[3];
+  const known = parts[1] === "apps" && isValidAppName(name) && (fs.existsSync(appDir(name)) || (["setup", "job", "deploys", "stats"].includes(sub) && fs.existsSync(path.join(REPOS, name))));
+  if (!known) return json(res, 404, { error: "not found" });
   const envFile = path.join(appDir(name), ".env");
 
+  if (sub === "setup" && req.method === "GET") {
+    const host = serverHost();
+    return json(res, 200, { host, domain: `${name.replace(/_/g, "-")}.${host}`, commands: localCommands(name, os.userInfo().username, host) });
+  }
   if (sub === "env" && !parts[4] && req.method === "GET") {
     // Values never leave the server unless requested one by one (GET /env/:key).
     return json(res, 200, parseEnv(read(envFile)).map(({ key }) => ({ key, sensitive: isSecretKey(key) })));

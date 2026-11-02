@@ -44,7 +44,7 @@ export function useJobs(onDone: (j: JobState) => void) {
   return { jobs, track, restore, dismiss };
 }
 
-const TITLE: Record<string, string> = { restart: "Redémarrage", stop: "Arrêt", start: "Démarrage", redeploy: "Redéploiement" };
+const TITLE: Record<string, string> = { restart: "Redémarrage", stop: "Arrêt", start: "Démarrage", redeploy: "Redéploiement", create: "Création de l'app" };
 
 export function JobBanner({ job, onDismiss }: { job: JobState; onDismiss: () => void }) {
   const running = job.state === "running";

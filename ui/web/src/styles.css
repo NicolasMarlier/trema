@@ -47,3 +47,7 @@ table{width:100%;border-collapse:collapse}th{text-align:left;color:var(--mut);fo
 .diff{list-style:none;padding:0;margin:10px 0}.diff li{display:flex;gap:8px;align-items:center;padding:3px 0}.diff .add span{color:var(--ok)}.diff .change span{color:var(--warn)}.diff .remove span{color:var(--ko)}.diff em{color:var(--mut);margin-left:auto;font-style:normal}
 .toasts{position:fixed;right:16px;bottom:16px;display:grid;gap:8px;z-index:20}.toast{padding:10px 14px;border-radius:8px;background:var(--card);border:1px solid var(--line);box-shadow:0 6px 24px #0008}.toast.ok{border-color:#1d6b4a}.toast.error{border-color:#7a2a26;color:#ff9a93}
 @media(max-width:760px){.shell{flex-direction:column}nav{width:auto;height:auto;position:static}main{padding:14px}.env-row{grid-template-columns:1fr auto auto}.env-row .key{grid-column:1/-1}}
+
+.dot.pending{background:var(--warn);opacity:.5}
+.cmds{background:#0006;border:1px solid var(--line);border-radius:8px;padding:12px;overflow:auto;font-size:12.5px;user-select:all}
+.modal input{width:100%;margin-top:10px;box-sizing:border-box}

@@ -208,3 +208,15 @@ export function Deploys({ app }: { app: string }) {
     </Card>
   );
 }
+
+export function Pending({ app, busy, onRetry }: { app: string; busy: boolean; onRetry: () => void }) {
+  const r = useResource<{ domain: string; commands: string[] }>(`setup:${app}`, () => api(appPath(app, "setup")));
+  return (
+    <Card title="En attente du premier déploiement">
+      <p className="mut">Le serveur est prêt. Dans le dossier git local de l'app, lancez :</p>
+      {r.error ? <ErrorBox error={r.error} onRetry={r.reload} /> : r.data ? <pre className="cmds">{r.data.commands.join("\n")}</pre> : <Skeleton h={60} />}
+      <p className="mut">Si la création a échoué (DNS, certificat…), corrigez puis relancez : les étapes déjà faites sont conservées.</p>
+      <button disabled={busy} onClick={onRetry}>Réessayer la configuration</button>
+    </Card>
+  );
+}

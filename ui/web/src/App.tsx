@@ -4,7 +4,7 @@ import { buildHash, formatBytes, parseHash, percent, TABS, type Route, type Tab 
 import { useResource } from "./useResource";
 import { Confirm, ErrorBox, Gauge, Refreshing, Skeleton, StatusDot, StatusPill } from "./ui";
 import { JobBanner, useJobs } from "./jobs";
-import { Deploys, Env, Logs, Overview } from "./tabs";
+import { Deploys, Env, Logs, Overview, Pending } from "./tabs";
 import { useToast } from "./toast";
 
 const TAB_LABEL: Record<Tab, string> = { overview: "Vue d'ensemble", logs: "Logs", env: "Env", deploys: "Déploiements" };
@@ -19,11 +19,12 @@ function useRoute(): [Route, (r: Route) => void] {
   return [route, (r) => { location.hash = buildHash(r); }];
 }
 
-function Sidebar({ apps, selected, onSelect, system, hostname, isPublic }: { apps: ReturnType<typeof useResource<AppsResponse>>; selected: string | null; onSelect: (n: string) => void; system: System | undefined; hostname?: string; isPublic?: boolean }) {
+function Sidebar({ onNew, apps, selected, onSelect, system, hostname, isPublic }: { onNew: () => void; apps: ReturnType<typeof useResource<AppsResponse>>; selected: string | null; onSelect: (n: string) => void; system: System | undefined; hostname?: string; isPublic?: boolean }) {
   return (
     <nav>
       <div className="brand">▲ Trema<small>{hostname ?? ""}</small></div>
       <div className="section">Apps <Refreshing on={apps.refreshing} /></div>
+      <button className="app-item" onClick={onNew}>+ Nouvelle app</button>
       <div className="apps">
         {apps.loading && [0, 1, 2].map((i) => <div key={i} className="app-item"><Skeleton h={16} /></div>)}
         {apps.error && !apps.data && <ErrorBox error={apps.error} onRetry={apps.reload} />}
@@ -32,7 +33,7 @@ function Sidebar({ apps, selected, onSelect, system, hostname, isPublic }: { app
             <StatusDot status={a.status} busy={a.busy} /><span>{a.name}</span>
           </button>
         ))}
-        {apps.data && !apps.data.apps.length && <p className="mut pad">Aucune app. Créez-en une avec <code>trema init</code>.</p>}
+        {apps.data && !apps.data.apps.length && <p className="mut pad">Aucune app. Créez-en une avec « + Nouvelle app ».</p>}
       </div>
       <div className="vm">
         <div className="section">Serveur</div>
@@ -63,6 +64,19 @@ export function App() {
   });
   const [confirm, setConfirm] = useState<null | "stop" | "redeploy">(null);
   const [pending, setPending] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState("");
+
+  const create = useCallback(async (name: string) => {
+    try {
+      const r = await api<{ job: any }>("apps", { method: "POST", body: { name } });
+      if (r.job) track(r.job);
+      setCreating(false); setNewName(""); go({ app: name, tab: "overview" });
+      setTimeout(apps.reload, 300);
+    } catch (e) {
+      toast("error", e instanceof ApiError && e.status === 409 ? "Cette app existe déjà ou une action est en cours" : (e as Error).message);
+    }
+  }, [track, apps, toast, go]);
 
   const app: AppInfo | undefined = apps.data?.apps.find((a) => a.name === route.app);
   useEffect(() => { if (route.app) restore(route.app); }, [route.app, restore]);
@@ -85,7 +99,7 @@ export function App() {
 
   return (
     <div className="shell">
-      <Sidebar apps={apps} selected={route.app} onSelect={(n) => go({ app: n, tab: route.tab })} system={sys.data} hostname={sys.data?.hostname} isPublic={me.data?.public} />
+      <Sidebar onNew={() => setCreating(true)} apps={apps} selected={route.app} onSelect={(n) => go({ app: n, tab: route.tab })} system={sys.data} hostname={sys.data?.hostname} isPublic={me.data?.public} />
       <main>
         {apps.data && !apps.data.dockerOk && <div className="banner error">Docker est injoignable : les statuts et les stats ne sont pas à jour.</div>}
         {!route.app || !app ? (
@@ -97,14 +111,15 @@ export function App() {
                 <h1>{app.name} <StatusPill status={app.status} busy={busy} /></h1>
                 {app.url ? <a href={app.url} target="_blank" rel="noreferrer noopener">{app.url.replace(/^https:\/\//, "")} ↗</a> : <span className="mut">Pas d'URL publique</span>}
               </div>
-              <div className="actions">
+              {app.status !== "pending" && <div className="actions">
                 <button disabled={busy || !!pending} onClick={() => act("start")}>{pending === "start" ? "…" : "Démarrer"}</button>
                 <button disabled={busy || !!pending} onClick={() => act("restart")}>{pending === "restart" ? "…" : "Redémarrer"}</button>
                 <button className="danger" disabled={busy || !!pending} onClick={() => setConfirm("stop")}>Arrêter</button>
                 <button className="primary" disabled={busy || !!pending} onClick={() => setConfirm("redeploy")}>Redéployer</button>
-              </div>
+              </div>}
             </header>
             {job && <JobBanner job={job} onDismiss={() => dismiss(app.name)} />}
+            {app.status === "pending" ? <Pending app={app.name} busy={busy} onRetry={() => create(app.name)} /> : <>
             <div className="tabs" role="tablist">
               {TABS.map((t) => <a key={t} role="tab" aria-selected={t === route.tab} className={t === route.tab ? "active" : ""} href={buildHash({ app: app.name, tab: t })}>{TAB_LABEL[t]}</a>)}
             </div>
@@ -112,9 +127,20 @@ export function App() {
             {route.tab === "logs" && <Logs app={app.name} />}
             {route.tab === "env" && <Env app={app.name} busy={busy} onRedeploy={track} />}
             {route.tab === "deploys" && <Deploys app={app.name} />}
+            </>}
           </>
         )}
       </main>
+      {creating && (
+        <div className="modal-bg" onClick={() => setCreating(false)}>
+          <form className="modal" role="dialog" aria-modal onClick={(e) => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); create(newName); }}>
+            <h3>Nouvelle app</h3>
+            <div className="mut">Prépare le serveur (repo git, hook, nginx, HTTPS). Le nom sert aussi de sous-domaine.</div>
+            <input autoFocus value={newName} onChange={(e) => setNewName(e.target.value.toLowerCase())} placeholder="mon-app" pattern="[a-z0-9]([a-z0-9_\-]{0,38}[a-z0-9])?" required />
+            <div className="actions"><button type="button" onClick={() => setCreating(false)}>Annuler</button><button className="primary" type="submit">Créer</button></div>
+          </form>
+        </div>
+      )}
       {confirm === "stop" && <Confirm danger title={`Arrêter ${route.app} ?`} text="L'app ne répondra plus tant qu'elle n'est pas redémarrée." confirm="Arrêter" onNo={() => setConfirm(null)} onYes={() => act("stop")} />}
       {confirm === "redeploy" && <Confirm title={`Redéployer ${route.app} ?`} text="Les conteneurs sont reconstruits et recréés avec le .env actuel (quelques minutes)." confirm="Redéployer" onNo={() => setConfirm(null)} onYes={() => act("redeploy")} />}
     </div>
