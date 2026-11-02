@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import type { Status } from "./api";
 
-const LABEL: Record<Status | "busy", string> = { up: "En ligne", degraded: "Dégradée", down: "Arrêtée", unknown: "Inconnue", busy: "En cours" };
+const LABEL: Record<Status | "busy", string> = { up: "En ligne", degraded: "Dégradée", down: "Arrêtée", unknown: "Inconnue", pending: "En attente du premier déploiement", busy: "En cours" };
 
 export function StatusDot({ status, busy }: { status: Status; busy?: boolean }) {
   const k = busy ? "busy" : status;

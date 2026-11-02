@@ -231,7 +231,9 @@ EOF
 ui_install() {
     # Build the React bundle locally; the server only receives static files (no node_modules).
     (cd "$(trema_path)/ui/web" && npm install --no-audit --no-fund && npm run build) || { echo "❌ UI build failed"; exit 1; }
-    rsync -r --delete --exclude node_modules --exclude web $(trema_path)/ui $(trema_path)/package.json $TREMA_USERNAME@$TREMA_HOSTNAME:trema-ui/
+    rsync -r --delete --exclude node_modules --exclude web $(trema_path)/ui $(trema_path)/hooks $(trema_path)/package.json $TREMA_USERNAME@$TREMA_HOSTNAME:trema-ui/
+    # Lets the UI create apps (certbot needs root): only these two commands, without password.
+    do_ssh "printf '%s ALL=(root) NOPASSWD: /usr/bin/certbot --nginx --non-interactive --domains *, /usr/bin/systemctl reload nginx\n' \"\$USER\" | sudo tee /etc/sudoers.d/trema-ui >/dev/null && sudo chmod 440 /etc/sudoers.d/trema-ui && sudo visudo -cf /etc/sudoers.d/trema-ui >/dev/null || { sudo rm -f /etc/sudoers.d/trema-ui; echo '❌ invalid sudoers rule' >&2; exit 1; }"
     if ! do_ssh "test -f ~/trema-ui/auth.json"; then
         ask_ui_password || exit 1
         ui_set_password || exit 1

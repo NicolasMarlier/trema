@@ -1,4 +1,4 @@
-export type Status = "up" | "degraded" | "down" | "unknown";
+export type Status = "up" | "degraded" | "down" | "unknown" | "pending";
 export type AppInfo = { name: string; status: Status; busy: boolean; url: string | null };
 export type AppsResponse = { dockerOk: boolean; apps: AppInfo[] };
 export type System = { cpu: number | null; mem: { total: number; used: number } | null; disk: { total: number; used: number } | null; hostname: string; dockerOk: boolean; at: number };

@@ -78,3 +78,21 @@ test("system parsers", () => {
   assert.equal(l.cpuPercent(a, b), 40);
   assert.equal(l.cpuPercent(null, b), null);
 });
+
+test("validateNewAppName", () => {
+  assert.equal(l.validateNewAppName("my-app_2"), null);
+  assert.equal(l.validateNewAppName("a"), null);
+  for (const bad of ["", "My", "-a", "a-", "a.b", "a b", "x".repeat(41), "trema", "trema_ui", "www"]) assert.ok(l.validateNewAppName(bad), bad);
+});
+test("nginxVhost uses sanitized subdomain", () => {
+  assert.match(l.nginxVhost("my_app", "ex.fr"), /server_name my-app\.ex\.fr;/);
+});
+test("mergeAppNames unions repos and apps", () => {
+  assert.deepEqual(l.mergeAppNames(["b", "a"], ["a", "c"]), [
+    { name: "a", deployed: true }, { name: "b", deployed: false }, { name: "c", deployed: true }]);
+});
+test("localCommands", () => {
+  const c = l.localCommands("blog", "u", "h.fr");
+  assert.equal(c[0], "git remote add trema u@h.fr:repos/blog");
+  assert.match(c[1], /TREMA_PROJECT_NAME=blog/);
+});

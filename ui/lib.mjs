@@ -179,3 +179,38 @@ function parseLabel(labels, key) {
   }
   return null;
 }
+
+// ---- New app creation (T-10) ----
+const NEW_APP_RE = /^[a-z0-9](?:[a-z0-9_-]{0,38}[a-z0-9])?$/;
+const RESERVED_APP_NAMES = ["trema", "trema-ui", "www"];
+
+/** Stricter than isValidAppName: the name is also a DNS label (underscores become hyphens). */
+export function validateNewAppName(name) {
+  if (typeof name !== "string" || !name) return "Nom requis.";
+  if (!NEW_APP_RE.test(name)) return "Minuscules, chiffres, - et _ uniquement (1 à 40 caractères, sans - ou _ en début/fin).";
+  if (RESERVED_APP_NAMES.includes(subdomainOf(name))) return "Nom réservé.";
+  return null;
+}
+
+export const subdomainOf = (name) => String(name).replace(/_/g, "-");
+
+/** Same vhost as `trema init` (certbot adds the TLS block). */
+export function nginxVhost(name, host) {
+  return `server {\n    server_name ${subdomainOf(name)}.${host};\n\n\tlocation / {\n\t\tproxy_pass http://localhost:3000;\n\t}\n}\n`;
+}
+
+/** Merge ~/repos and ~/apps names; apps without a deployed folder are "pending". */
+export function mergeAppNames(repoNames, appNames) {
+  const deployed = new Set(appNames);
+  const all = [...new Set([...appNames, ...repoNames])].filter(isValidAppName).sort();
+  return all.map((name) => ({ name, deployed: deployed.has(name) }));
+}
+
+/** Commands shown to the user to link the local folder after creation. */
+export function localCommands(name, user, host) {
+  return [
+    `git remote add trema ${user}@${host}:repos/${name}`,
+    `printf 'TREMA_HOSTNAME=${host}\\nTREMA_USERNAME=${user}\\nTREMA_PROJECT_NAME=${name}\\n' > trema.env`,
+    `git push trema main`,
+  ];
+}
