@@ -70,7 +70,8 @@ export function App() {
   const create = useCallback(async (name: string) => {
     try {
       const r = await api<{ job: any }>("apps", { method: "POST", body: { name } });
-      track(r.job); setCreating(false); setNewName(""); go({ app: name, tab: "overview" });
+      if (r.job) track(r.job);
+      setCreating(false); setNewName(""); go({ app: name, tab: "overview" });
       setTimeout(apps.reload, 300);
     } catch (e) {
       toast("error", e instanceof ApiError && e.status === 409 ? "Cette app existe déjà ou une action est en cours" : (e as Error).message);

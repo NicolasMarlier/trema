@@ -215,7 +215,7 @@ async function route(req, res) {
   const parts = url.pathname.split("/").filter(Boolean);
   if (parts[0] !== "api") return serveStatic(url.pathname, res);
   if (parts[1] === "me") return json(res, 200, { public: !tunnel });
-  if (parts[1] === "apps" && parts.length === 2) return json(res, 200, { dockerOk: cache.dockerOk !== false, apps: listApps() });
+  if (parts[1] === "apps" && parts.length === 2 && req.method === "GET") return json(res, 200, { dockerOk: cache.dockerOk !== false, apps: listApps() });
   if (parts[1] === "system" && parts.length === 2) return json(res, 200, { ...cache.system, hostname: os.hostname(), at: cache.at, dockerOk: cache.dockerOk !== false });
   if (parts[1] === "jobs" && parts[2]) {
     const job = jobs.get(parts[2]);
