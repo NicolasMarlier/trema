@@ -1,67 +1,62 @@
 #!/bin/bash
 GLOBAL_CONFIG="$HOME/.trema_config"
-LOCAL_CONFIG="trema.env"
 
+# Loads TREMA_HOSTNAME / TREMA_USERNAME from ~/.trema_config or exits with an error.
 load_global_config() {
-    if [[ -f "$GLOBAL_CONFIG" ]]; then
-        source "$GLOBAL_CONFIG"
-    else
-        echo "Tip: run 'trema config:edit --global' to set global defaults for hostname and username."
+    if [[ ! -f "$GLOBAL_CONFIG" ]]; then
+        echo "Error: $GLOBAL_CONFIG not found." >&2
+        echo "Run 'trema config:edit --global'." >&2
+        exit 1
+    fi
+    source "$GLOBAL_CONFIG"
+    if [[ -z "$TREMA_HOSTNAME" || -z "$TREMA_USERNAME" ]]; then
+        echo "Error: $GLOBAL_CONFIG missing TREMA_HOSTNAME / TREMA_USERNAME." >&2
+        echo "Run 'trema config:edit --global'." >&2
+        exit 1
     fi
 }
 
+# Prints the remote 'trema' URL (empty if none).
+trema_remote_url() { git remote get-url trema 2>/dev/null; }
+
 config_help() {
     echo "Usage:
-    trema config                  Display local config (trema.env)
-    trema config --global         Display global config (~/.trema_config)
-    trema config:edit             Edit local config (trema.env)
-    trema config:edit --global    Edit global config (~/.trema_config)
+    trema config                  Display the global config (~/.trema_config) and the detected app
+    trema config:edit             Edit the global config
     trema config --help           Show this help message
+(--global is accepted as an alias.)
 "
 }
 
 config_show() {
-    if [[ "$1" == "--global" ]]; then
-        if [[ -f "$GLOBAL_CONFIG" ]]; then
-            echo "Global config ($GLOBAL_CONFIG):"
-            cat "$GLOBAL_CONFIG"
-        else
-            echo "No global config found. Run 'trema config:edit --global' to create one."
-        fi
+    if [[ -f "$GLOBAL_CONFIG" ]]; then
+        echo "Global config ($GLOBAL_CONFIG):"
+        cat "$GLOBAL_CONFIG"
     else
-        if [[ -f "$LOCAL_CONFIG" ]]; then
-            echo "Local config ($LOCAL_CONFIG):"
-            cat "$LOCAL_CONFIG"
-        else
-            echo "No local config found. Run 'trema init' to create one."
-        fi
+        echo "No global config found. Run 'trema config:edit --global' to create one."
+    fi
+    local url; url=$(trema_remote_url)
+    if [[ "$url" == *:repos/* ]]; then
+        echo "Current app: ${url##*:repos/} (git remote trema)"
     fi
 }
 
 config_edit() {
-    if [[ "$1" == "--global" ]]; then
-        mkdir -p "$(dirname "$GLOBAL_CONFIG")"
-        ${EDITOR:-vi} "$GLOBAL_CONFIG"
-    else
-        if [[ ! -f "$LOCAL_CONFIG" ]]; then
-            echo "No local config found. Run 'trema init' to create one." >&2
-            exit 1
-        fi
-        ${EDITOR:-vi} "$LOCAL_CONFIG"
-    fi
+    mkdir -p "$(dirname "$GLOBAL_CONFIG")"
+    ${EDITOR:-vi} "$GLOBAL_CONFIG"
 }
 
 config() {
     case "$1" in
         --help) config_help ;;
-        --global) config_show --global ;;
-        *) config_show ;;
+        ""|--global) config_show ;;
+        *) config_help; exit 1 ;;
     esac
 }
 
 config_edit_cmd() {
     case "$1" in
-        --global) config_edit --global ;;
-        *) config_edit ;;
+        ""|--global) config_edit ;;
+        *) config_help; exit 1 ;;
     esac
 }

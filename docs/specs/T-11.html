@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>T-11 — Supprimer la config locale (trema.env) et trema init</title>
+<style>
+  :root{color-scheme:light}
+  *{box-sizing:border-box}
+  body{margin:0;font:15px/1.55 Inter,-apple-system,system-ui,sans-serif;background:#f4f1ea;color:#141517}
+  main{max-width:1000px;margin:0 auto;padding:32px 22px 80px}
+  .kicker{letter-spacing:.25em;font-size:11px;text-transform:uppercase;color:#565b58}
+  h1{font-size:28px;margin:4px 0 6px}
+  h2{margin:36px 0 10px;font-size:19px;border-bottom:1px solid #d3cec1;padding-bottom:5px}
+  .mut{color:#565b58}
+  code{font-family:ui-monospace,Menlo,monospace;font-size:13px;background:#ebe7dd;padding:1px 5px;border-radius:4px}
+  .note{border-left:3px solid #f15a24;background:#fbf9f4;padding:10px 14px;border-radius:0 8px 8px 0;margin:14px 0}
+  table{border-collapse:collapse;width:100%;font-size:14px}
+  td,th{border-bottom:1px solid #d3cec1;padding:6px 8px;text-align:left;vertical-align:top}
+  th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#565b58}
+  .del{color:#a3341a;text-decoration:line-through}
+  .dec td:first-child{font-weight:600;white-space:nowrap}
+  .tag{display:inline-block;font-size:11px;padding:0 7px;border-radius:10px;background:#e3f6ec;color:#17603d}
+  .tag.ch{background:#fdeee6;color:#a3341a}
+  .proto{border:1px solid #d3cec1;border-radius:12px;overflow:hidden;background:#fbf9f4}
+  .tb{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 12px;background:#ebe7dd;border-bottom:1px solid #d3cec1;font-size:12.5px}
+  .tb button{font:inherit;font-size:12.5px;border:1px solid #d3cec1;background:#fbf9f4;color:#141517;border-radius:6px;padding:3px 10px;cursor:pointer}
+  .tb button.on{background:#141517;color:#f4f1ea;border-color:#141517}
+  .term{background:#141517;color:#e8eaf0;font:13px/1.55 ui-monospace,Menlo,monospace;padding:14px 16px;min-height:200px;white-space:pre-wrap}
+  .term .p{color:#f15a24}.term .ok{color:#3ecf8e}.term .ko{color:#f5594e}.term .w{color:#f0b429}.term .m{color:#8f97a8}
+  .legend{padding:10px 14px;font-size:13px;border-top:1px solid #d3cec1;background:#fff}
+  .ui{padding:16px;background:#fff}
+  .card{border:1px solid #d3cec1;border-radius:10px;padding:12px 14px;max-width:620px}
+  .card h4{margin:0 0 8px;font-size:14px}
+  .code{background:#141517;color:#e8eaf0;font:12.5px/1.6 ui-monospace,Menlo,monospace;border-radius:8px;padding:10px 12px;white-space:pre}
+  .code .x{color:#f5594e;text-decoration:line-through;opacity:.8}
+  .copy{float:right;font-size:12px;border:1px solid #d3cec1;background:#fbf9f4;border-radius:6px;padding:2px 9px}
+  svg.flow text{font:12px Inter,system-ui,sans-serif;fill:#141517}
+  svg.flow .sm{font-size:10.5px;fill:#565b58}
+  svg.flow .b{fill:#fbf9f4;stroke:#d3cec1;stroke-width:1.3}
+  svg.flow .a{fill:#fbf9f4;stroke:#f15a24;stroke-width:1.5}
+  svg.flow .k{fill:#fdecea;stroke:#f5594e;stroke-width:1.3}
+  svg.flow .g{fill:#e3f6ec;stroke:#3ecf8e;stroke-width:1.3}
+  section[data-usine-q]{margin:14px 0}
+</style>
+</head>
+<body>
+<main>
+  <div class="kicker">Usine · trema · T-11 · Spec (v2)</div>
+  <h1>Supprimer <code>trema.env</code> et <code>trema init</code></h1>
+  <p class="mut">Chaque projet a aujourd'hui un <code>trema.env</code> (hôte, utilisateur, nom de l'app). Ce fichier est créé par <code>trema init</code>, et presque toutes les commandes l'exigent. Il fait doublon : l'hôte et l'utilisateur sont déjà dans <code>~/.trema_config</code>, et le nom de l'app est déjà dans le remote git <code>trema</code>. Depuis T-10, la création d'une app se fait dans l'UI, donc <code>trema init</code> ne sert plus non plus.</p>
+
+  <h2>Décisions</h2>
+  <table class="dec">
+    <tr><td>Q1 · Nom de l'app</td><td>Il est lu dans le remote git <code>trema</code> (<code>…:repos/&lt;app&gt;</code>). L'option <code>--app &lt;nom&gt;</code> permet de le forcer ou de lancer la commande hors du projet. <span class="tag">reco</span></td></tr>
+    <tr><td>Q2 · Hôte / utilisateur</td><td>Ils viennent toujours de <code>~/.trema_config</code>. Si l'hôte du remote est différent, la commande s'arrête avec une erreur explicite. Le multi-VM n'est plus supporté. <span class="tag">reco</span></td></tr>
+    <tr><td>Q3 · Config globale absente</td><td>Erreur claire qui renvoie vers <code>trema config:edit --global</code>. Cela vaut pour toutes les commandes, puisque <code>init</code> disparaît. <span class="tag">reco</span></td></tr>
+    <tr><td>Q4 · <code>config</code> / <code>config:edit</code></td><td>Sans option, elles gèrent la config globale ; <code>config</code> affiche aussi l'app détectée, pour info. <code>--global</code> reste accepté comme alias. <span class="tag">reco</span></td></tr>
+    <tr><td>Q5 · <code>trema.env</code> existants</td><td><b>Supprimés automatiquement.</b> <span class="tag ch">≠ reco</span></td></tr>
+    <tr><td>Remarque</td><td><b><code>trema init</code> est supprimé</b> : on crée désormais l'app depuis l'UI (T-10).</td></tr>
+  </table>
+
+  <h2>Proposition</h2>
+  <ul>
+    <li><b>Config</b> : une seule source, <code>~/.trema_config</code>. <code>load_env</code> est remplacé par deux étapes :
+      <ul>
+        <li>la vérification de la config globale, faite pour toutes les commandes ;</li>
+        <li>la résolution de l'app (<code>--app</code>, sinon le remote <code>trema</code>), faite seulement pour les commandes d'app.</li>
+      </ul></li>
+    <li><b>Commandes globales</b> (<code>ui*</code>, <code>server:setup</code>, <code>ssh</code>) : elles marchent depuis n'importe quel dossier.</li>
+    <li><b>Commandes d'app</b> (<code>logs</code>, <code>console</code>, <code>env</code>, <code>migrate</code>, <code>destroy</code>, <code>update</code>, <code>load_pg_dump</code>, <code>archive_db</code>, <code>heroku_pg_dump</code>) : il leur faut un nom d'app. Sans remote ni <code>--app</code>, l'erreur renvoie vers l'UI.</li>
+    <li><b><code>trema init</code> supprimé</b>, avec son code (<code>init</code>, <code>add_nginx_config</code>). La création se fait dans l'UI, qui fournit les commandes à copier (Q6 : ce que la CLI répond si on tape encore <code>init</code>).</li>
+    <li><b>Migration</b> : si la CLI trouve un <code>trema.env</code> dans le dossier courant, elle le supprime et l'indique sur une ligne (Q7 : cas où son contenu diffère de la config globale).</li>
+    <li><b><code>trema destroy</code></b> retire seulement le remote. Il ne touche plus à <code>trema.env</code>.</li>
+    <li><b>UI</b> : le bloc « commandes à copier » perd la ligne <code>printf … &gt; trema.env</code> (<code>ui/lib.mjs</code>). Les commentaires « équivalent de trema init » sont mis à jour.</li>
+    <li><b>Docs</b> à mettre à jour : <code>architecture.html</code>, <code>zones.svg</code>, le README et l'aide de la CLI (<code>usage</code> et <code>trema-config</code>).</li>
+    <li><b>Tests</b> :
+      <ul>
+        <li>bash : nom lu dans le remote, <code>--app</code>, config absente, remote absent, hôte différent, commande globale lancée hors projet, suppression de <code>trema.env</code>, réponse à <code>init</code> ;</li>
+        <li>Node : <code>localCommands</code> sans <code>trema.env</code>.</li>
+      </ul></li>
+  </ul>
+
+  <h2>Avant / après</h2>
+  <table>
+    <tr><th>Élément</th><th>Avant</th><th>Après</th></tr>
+    <tr><td>Commandes globales</td><td>exigent <code>trema.env</code></td><td><code>~/.trema_config</code> seulement, utilisables partout</td></tr>
+    <tr><td>Commandes d'app</td><td>exigent <code>trema.env</code></td><td>config globale + nom d'app (remote <code>trema</code> ou <code>--app</code>)</td></tr>
+    <tr><td>Créer une app</td><td><code>trema init</code> dans le dossier</td><td>UI → « Nouvelle app » → copier <code>git remote add</code> + <code>git push</code></td></tr>
+    <tr><td><span class="del">trema init</span></td><td>pose des questions, écrit <code>trema.env</code>, crée le repo, le vhost, le certificat et le remote</td><td>supprimé (Q6)</td></tr>
+    <tr><td><code>config</code> / <code>config:edit</code></td><td>local par défaut, <code>--global</code> en option</td><td>global ; <code>--global</code> accepté comme alias</td></tr>
+    <tr><td>Fichiers</td><td><code>~/.trema_config</code> + <span class="del">&lt;projet&gt;/trema.env</span></td><td><code>~/.trema_config</code></td></tr>
+  </table>
+
+  <h2>Résolution de la config</h2>
+  <svg class="flow" viewBox="0 0 960 300" width="100%" role="img" aria-label="Résolution de la config">
+    <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="#565b58"/></marker></defs>
+    <rect class="b" x="10" y="100" width="140" height="50" rx="8"/><text x="22" y="122">trema &lt;cmd&gt;</text><text x="22" y="138" class="sm">n'importe quel dossier</text>
+    <rect class="g" x="10" y="20" width="140" height="50" rx="8"/><text x="22" y="42">trema.env présent ?</text><text x="22" y="58" class="sm">→ supprimé (Q5, Q7)</text>
+    <rect class="a" x="190" y="100" width="190" height="50" rx="8"/><text x="202" y="122">~/.trema_config</text><text x="202" y="138" class="sm">TREMA_HOSTNAME, TREMA_USERNAME</text>
+    <rect class="k" x="190" y="200" width="190" height="50" rx="8"/><text x="202" y="222">❌ config manquante</text><text x="202" y="238" class="sm">→ trema config:edit --global</text>
+    <rect class="b" x="420" y="20" width="170" height="50" rx="8"/><text x="432" y="42">Commande globale</text><text x="432" y="58" class="sm">ui, server:setup, ssh…</text>
+    <rect class="b" x="420" y="130" width="170" height="50" rx="8"/><text x="432" y="152">Commande d'app</text><text x="432" y="168" class="sm">logs, env, migrate…</text>
+    <rect class="a" x="630" y="90" width="150" height="50" rx="8"/><text x="642" y="112">--app &lt;nom&gt; ?</text><text x="642" y="128" class="sm">prioritaire</text>
+    <rect class="a" x="630" y="160" width="150" height="50" rx="8"/><text x="642" y="182">git remote trema</text><text x="642" y="198" class="sm">…:repos/&lt;app&gt;</text>
+    <rect class="b" x="810" y="20" width="140" height="50" rx="8"/><text x="822" y="42">✅ exécution</text>
+    <rect class="k" x="810" y="160" width="140" height="50" rx="8"/><text x="822" y="182">❌ hôte ≠ config</text><text x="822" y="198" class="sm">remote sur une autre VM</text>
+    <rect class="k" x="630" y="240" width="150" height="50" rx="8"/><text x="642" y="262">❌ app inconnue</text><text x="642" y="278" class="sm">→ UI ou --app</text>
+    <path d="M80 100V72M150 125H188M285 150V198M380 118L418 50M380 132L418 152M590 45H808M590 150L628 120M705 140V158M780 110L808 60M780 185H808M705 210V238" stroke="#565b58" fill="none" marker-end="url(#ar)"/>
+    <text x="786" y="98" class="sm">ok</text>
+  </svg>
+
+  <h2>Nouveau parcours de création</h2>
+  <svg class="flow" viewBox="0 0 960 90" width="100%" role="img" aria-label="Créer une app">
+    <defs><marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="#565b58"/></marker></defs>
+    <rect class="b" x="10" y="20" width="200" height="50" rx="8"/><text x="22" y="42">trema config:edit</text><text x="22" y="58" class="sm">une fois par poste</text>
+    <rect class="a" x="250" y="20" width="200" height="50" rx="8"/><text x="262" y="42">UI → Nouvelle app</text><text x="262" y="58" class="sm">repo, hook, vhost, certificat</text>
+    <rect class="a" x="490" y="20" width="200" height="50" rx="8"/><text x="502" y="42">Copier les commandes</text><text x="502" y="58" class="sm">git remote add trema …</text>
+    <rect class="b" x="730" y="20" width="220" height="50" rx="8"/><text x="742" y="42">git push trema main</text><text x="742" y="58" class="sm">puis trema logs, env… sans config</text>
+    <path d="M210 45H248M450 45H488M690 45H728" stroke="#565b58" fill="none" marker-end="url(#ar2)"/>
+  </svg>
+
+  <h2>Prototype</h2>
+  <h3 style="font-size:15px">UI : bloc « commandes à copier » (fiche d'une app créée)</h3>
+  <div class="proto">
+    <div class="ui">
+      <div class="card">
+        <h4>À lancer dans le dossier de <code>blog</code> <span class="copy">Copier</span></h4>
+        <div class="code">git remote add trema nicolas@vps.nicolasm.fr:repos/blog
+<span class="x">printf 'TREMA_HOSTNAME=…\nTREMA_USERNAME=…\nTREMA_PROJECT_NAME=blog\n' &gt; trema.env</span>
+git push trema main</div>
+        <p class="mut" style="font-size:13px;margin:8px 0 0">La ligne barrée disparaît.</p>
+      </div>
+    </div>
+  </div>
+
+  <h3 style="font-size:15px;margin-top:22px">CLI</h3>
+  <div class="proto">
+    <div class="tb">
+      <span class="mut">Scénario :</span>
+      <button data-s="logs" class="on">logs dans une app</button>
+      <button data-s="app">logs --app hors projet</button>
+      <button data-s="ui">ui hors projet</button>
+      <button data-s="legacy">trema.env résiduel</button>
+      <button data-s="legacydiff">trema.env ≠ global</button>
+      <button data-s="init">trema init</button>
+      <button data-s="noremote">app sans remote</button>
+      <button data-s="otherhost">remote sur autre hôte</button>
+      <button data-s="noconf">sans config globale</button>
+      <button data-s="config">trema config</button>
+    </div>
+    <div class="term" id="term"></div>
+    <div class="legend" id="legend"></div>
+  </div>
+
+  <h2>Hors périmètre</h2>
+  <ul class="mut">
+    <li>Le multi-VM (une app sur un autre hôte que celui de la config globale) : refusé avec une erreur (Q2).</li>
+    <li><code>trema update</code> et <code>trema destroy</code> restent dans la CLI comme commandes d'app, avec le même comportement qu'aujourd'hui.</li>
+  </ul>
+
+  <h2>Questions ouvertes</h2>
+
+  <section data-usine-q="Q6" data-kind="single" data-label="Que répond la CLI si on tape encore « trema init » ?" data-reco="a">
+    <div data-option="a">Un message qui renvoie vers l'UI (« trema init a été retiré : créez l'app avec trema ui ») et un code de sortie 1</div>
+    <div data-option="b">Rien de spécial : commande inconnue, affichage de l'aide</div>
+  </section>
+  <p class="mut">Reco <b>a</b> : la commande a été longtemps utilisée et figure dans d'anciennes docs. Un message explicite évite de chercher. Il coûte deux lignes et pourra être retiré plus tard.</p>
+
+  <section data-usine-q="Q7" data-kind="single" data-label="Suppression auto de trema.env : que faire si son contenu diffère de ~/.trema_config (autre hôte/utilisateur, autre nom d'app que le remote) ?" data-reco="a">
+    <div data-option="a">Le supprimer quand même, en affichant les valeurs supprimées (ligne d'avertissement)</div>
+    <div data-option="b">Ne pas le supprimer et arrêter la commande avec une erreur tant que l'écart n'est pas résolu</div>
+    <div data-option="c">Le supprimer sans distinction, avec la même ligne d'info que dans le cas normal</div>
+  </section>
+  <p class="mut">Reco <b>a</b> : la décision Q5 est respectée et l'information reste visible. Si l'hôte était différent, l'erreur Q2 (hôte du remote ≠ config) se déclenche ensuite de toute façon.</p>
+</main>
+
+<script>
+(() => {
+  const H = "vps.nicolasm.fr", U = "nicolas";
+  const S = {
+    logs: ["<span class='p'>~/code/blog $</span> trema logs --tail 20",
+      "Puma starting in single mode…", "* Listening on http://0.0.0.0:3000",
+      "Le nom 'blog' vient du remote trema (nicolas@vps…:repos/blog). Aucun fichier local."],
+    app: ["<span class='p'>~ $</span> trema logs --app comptes",
+      "Puma starting in single mode…",
+      "--app vise une app sans être dans son dossier (Q1)."],
+    ui: ["<span class='p'>~/code/trema $</span> trema ui",
+      "Trema UI: http://localhost:4000 (Ctrl+C to stop)",
+      "Avant : « Error: trema.env not found ». Les commandes globales marchent maintenant partout."],
+    legacy: ["<span class='p'>~/code/vieux-projet $</span> trema logs",
+      "<span class='m'>🧹 Removed trema.env (no longer used, config comes from ~/.trema_config)</span>",
+      "Puma starting in single mode…",
+      "Suppression automatique (Q5) : une seule fois, puis la commande continue normalement."],
+    legacydiff: ["<span class='p'>~/code/autre $</span> trema logs",
+      "<span class='w'>⚠ Removed trema.env, which differed from ~/.trema_config:</span>",
+      "<span class='w'>    TREMA_HOSTNAME=old-vps.example.com (global: " + H + ")</span>",
+      "<span class='ko'>Error: remote 'trema' points to old-vps.example.com, but ~/.trema_config uses " + H + ".</span>",
+      "Variante Q7 = a : fichier supprimé, valeurs affichées ; l'erreur Q2 prend ensuite le relais."],
+    init: ["<span class='p'>~/code/blog $</span> trema init",
+      "<span class='ko'>'trema init' was removed. Create the app in the UI ('trema ui' → New app),</span>",
+      "<span class='ko'>then run the commands it shows (git remote add trema … && git push trema main).</span>",
+      "Variante Q6 = a."],
+    noremote: ["<span class='p'>~/code/nouveau $</span> trema logs",
+      "<span class='ko'>Error: no Trema app here (no 'trema' git remote).</span>",
+      "<span class='m'>Create it in the UI ('trema ui'), or pass --app &lt;name&gt;.</span>",
+      "Le message renvoie vers l'UI au lieu de trema init."],
+    otherhost: ["<span class='p'>~/code/legacy $</span> trema logs",
+      "<span class='ko'>Error: remote 'trema' points to other.example.com, but ~/.trema_config uses " + H + ".</span>",
+      "<span class='m'>Multiple VMs are not supported. Update the remote or ~/.trema_config.</span>",
+      "Décision Q2."],
+    noconf: ["<span class='p'>~/code/blog $</span> trema logs",
+      "<span class='ko'>Error: ~/.trema_config missing TREMA_HOSTNAME / TREMA_USERNAME.</span>",
+      "<span class='m'>Run 'trema config:edit --global'.</span>",
+      "Même vérification pour toutes les commandes (Q3)."],
+    config: ["<span class='p'>~/code/blog $</span> trema config",
+      "Global config (~/.trema_config):",
+      "TREMA_HOSTNAME=" + H, "TREMA_USERNAME=" + U,
+      "<span class='m'>Current app: blog (git remote trema)</span>",
+      "Config globale, plus l'app détectée en info (Q4)."]
+  };
+  const t = document.getElementById("term"), l = document.getElementById("legend");
+  function show(k) {
+    document.querySelectorAll(".tb button").forEach((b) => b.classList.toggle("on", b.dataset.s === k));
+    const lines = S[k]; t.innerHTML = lines.slice(0, -1).join("\n"); l.textContent = lines[lines.length - 1];
+  }
+  document.querySelectorAll(".tb button").forEach((b) => b.onclick = () => show(b.dataset.s));
+  show("logs");
+})();
+</script>
+</body>
+</html>
