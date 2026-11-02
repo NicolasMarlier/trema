@@ -1,4 +1,4 @@
-// Server-side equivalent of `trema init`. Every step is idempotent so a failed creation can be retried.
+// Server-side app creation (formerly `trema init`). Every step is idempotent so a failed creation can be retried.
 import fs from "node:fs";
 import path from "node:path";
 import { nginxVhost, subdomainOf } from "./lib.mjs";

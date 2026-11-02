@@ -23,14 +23,14 @@ img{max-width:100%} .tag{display:inline-block;padding:0 8px;border-radius:10px;f
 <h2 id="carte">2. Carte des éléments</h2>
 <div id="f"></div>
 <table id="t"><thead><tr><th>Élément</th><th>Zone</th><th>Chemin</th><th>Créé par</th></tr></thead><tbody></tbody></table>
-<p class="warn"><strong>Copié depuis le central.</strong> Le hook <code>post-receive</code> (copié dans chaque dépôt nu à <code>trema init</code>) et les templates Docker (copiés dans chaque worktree à chaque déploiement) sont des <em>copies</em>. Une copie n'est mise à jour que par <code>trema update</code> (hook) ou au prochain déploiement (templates, à partir de <code>~/docker_compose_files</code>, lui-même mis à jour par <code>update</code>).</p>
+<p class="warn"><strong>Copié depuis le central.</strong> Le hook <code>post-receive</code> (copié dans chaque dépôt nu à la création de l'app) et les templates Docker (copiés dans chaque worktree à chaque déploiement) sont des <em>copies</em>. Une copie n'est mise à jour que par <code>trema update</code> (hook) ou au prochain déploiement (templates, à partir de <code>~/docker_compose_files</code>, lui-même mis à jour par <code>update</code>).</p>
 
 <h2 id="flux">3. Flux principaux</h2>
-<h3><code>trema init</code></h3>
-<ol><li>Demande hôte/utilisateur (défauts dans <code>~/.trema_config</code>), écrit <code>trema.env</code>.</li>
+<h3>Création d'une app (interface)</h3>
+<ol><li>Depuis l'interface (<code>trema ui</code>) ; plus de commande <code>trema init</code> ni de <code>trema.env</code> : l'hôte et l'utilisateur viennent de <code>~/.trema_config</code>, le nom de l'app du remote git <code>trema</code> (ou de <code>--app &lt;nom&gt;</code>).</li>
 <li>Crée <code>~/repos/&lt;app&gt;</code> (dépôt nu) sur la VM et y copie <code>hooks/</code>.</li>
 <li>Écrit le vhost nginx <code>&lt;app&gt;.&lt;hôte&gt;</code> (les <code>_</code> deviennent <code>-</code>) et obtient le certificat via certbot.</li>
-<li>Ajoute le remote git <code>trema</code>.</li></ol>
+<li>L'interface affiche les commandes à copier : <code>git remote add trema …</code> puis <code>git push trema main</code>.</li></ol>
 <h3><code>git push trema main</code></h3>
 <img src="img/deploy-flow.svg" alt="Flux de déploiement">
 <ol><li>Le hook extrait le code dans <code>~/apps/&lt;app&gt;</code>.</li>
@@ -43,7 +43,7 @@ img{max-width:100%} .tag{display:inline-block;padding:0 8px;border-radius:10px;f
 <h3><code>trema update</code></h3>
 <p>Recopie <code>docker_compose_files</code>, relance <code>server:setup</code> (rotation des logs Docker, cron de purge de <code>/db_dumps</code>) et recopie le hook de l'app courante. <strong>Les autres apps gardent leur ancien hook</strong> jusqu'à ce qu'on lance <code>update</code> dans chacune.</p>
 <h3><code>trema destroy</code></h3>
-<p>Arrête les conteneurs et supprime le volume de la base, <code>repos/&lt;app&gt;</code>, <code>apps/&lt;app&gt;</code>, <code>envs/&lt;app&gt;.env</code>, le vhost, puis le remote git et <code>trema.env</code> en local. Les dumps de <code>/db_dumps</code> sont conservés (jusqu'à la purge).</p>
+<p>Arrête les conteneurs et supprime le volume de la base, <code>repos/&lt;app&gt;</code>, <code>apps/&lt;app&gt;</code>, <code>envs/&lt;app&gt;.env</code>, le vhost, puis le remote git local. Les dumps de <code>/db_dumps</code> sont conservés (jusqu'à la purge).</p>
 <h3>Base de données</h3>
 <p><code>load_pg_dump</code> envoie un fichier dans <code>/db_dumps</code> (monté dans le conteneur <code>db</code>) et le rejoue ; <code>archive_db</code> fait un <code>pg_dump</code> des données vers <code>data/</code> en local ; <code>heroku_pg_dump</code> récupère les données depuis Heroku.</p>
 
@@ -80,30 +80,30 @@ trema config:edit --global      # TREMA_HOSTNAME et TREMA_USERNAME par défaut
 sudo mkdir -p /db_dumps
 
 # depuis n'importe quel projet git :
-trema init                      # crée dépôt, vhost, certificat, remote, trema.env
+# créer l'app dans l'interface (trema ui), puis copier ses commandes :
+git remote add trema user@hôte:repos/<app>
 trema update                    # copie les templates, lance server:setup, met à jour le hook
 trema ui:install                # interface web
 git push trema main             # déploie</pre>
-<p><code>update</code> et <code>ui:install</code> lisent <code>trema.env</code>, créé par <code>init</code> : lancez <code>init</code> d'abord. Lancez <code>update</code> une fois par app pour que son hook soit à jour ; les templates sont nécessaires au premier <code>git push</code> (template Rails).</p>
+<p>Les commandes d'app lisent l'hôte dans <code>~/.trema_config</code> et le nom de l'app dans le remote <code>trema</code> (ou <code>--app</code>) ; un ancien <code>trema.env</code> est supprimé automatiquement. Lancez <code>update</code> une fois par app pour que son hook soit à jour ; les templates sont nécessaires au premier <code>git push</code> (template Rails).</p>
 
 <script>
 const rows=[
 ["CLI trema","l","bin/trema, bin/trema-config","git clone + PATH"],
-["Config globale","l","~/.trema_config","trema config:edit --global"],
-["Config projet","l","trema.env","trema init"],
-["Remote git","l","git remote « trema »","trema init"],
+["Config globale","l","~/.trema_config","trema config:edit"],
+["Remote git","l","git remote « trema »","commandes copiées depuis l'UI"],
 ["nginx + certbot","s","/etc/nginx/sites-enabled","installation de la VM"],
 ["Rotation logs Docker","s","/etc/docker/daemon.json","trema server:setup / update"],
 ["Templates Docker","s","~/docker_compose_files","trema update"],
 ["Dumps SQL + purge","s","/db_dumps, /etc/cron.d/trema-prune-dumps","mkdir manuel + server:setup"],
 ["Interface web","s","~/trema-ui, trema-ui.service, vhost trema.<hôte>","trema ui:install"],
-["Dépôt nu","a","~/repos/<app>","trema init"],
-["Hook post-receive","a","~/repos/<app>/hooks","trema init / update (copie)"],
+["Dépôt nu","a","~/repos/<app>","création depuis l'UI"],
+["Hook post-receive","a","~/repos/<app>/hooks","UI / update (copie)"],
 ["Worktree","a","~/apps/<app>","git push (hook)"],
 ["Dockerfile + compose","a","~/apps/<app>/Dockerfile, docker-compose.yml","hook (copie des templates)"],
 ["Secrets","a","~/apps/<app>/.env","hook, puis trema env"],
 ["Conteneurs et volume","a","<app>-web-1, <app>-db-1, db_data","docker compose (hook)"],
-["Vhost de l'app","a","/etc/nginx/sites-enabled/<sous-domaine>","trema init, port mis à jour par le hook"],
+["Vhost de l'app","a","/etc/nginx/sites-enabled/<sous-domaine>","UI, port mis à jour par le hook"],
 ["Historique","a","~/apps/<app>/deploys.log","hook"]];
 const names={l:"Local",s:"VM partagé",a:"VM par app"};let cur="*";
 const f=document.getElementById("f"),tb=document.querySelector("#t tbody");

@@ -94,5 +94,5 @@ test("mergeAppNames unions repos and apps", () => {
 test("localCommands", () => {
   const c = l.localCommands("blog", "u", "h.fr");
   assert.equal(c[0], "git remote add trema u@h.fr:repos/blog");
-  assert.match(c[1], /TREMA_PROJECT_NAME=blog/);
+  assert.deepEqual(c, ["git remote add trema u@h.fr:repos/blog", "git push trema main"]);
 });
