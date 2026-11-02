@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>T-10 — Initialiser une nouvelle app depuis l'interface</title>
+<style>
+  :root{color-scheme:light}
+  *{box-sizing:border-box}
+  body{margin:0;font:15px/1.55 Inter,-apple-system,system-ui,sans-serif;background:#f4f1ea;color:#141517}
+  main{max-width:1000px;margin:0 auto;padding:32px 22px 80px}
+  .kicker{letter-spacing:.25em;font-size:11px;text-transform:uppercase;color:#565b58}
+  h1{font-size:28px;margin:4px 0 6px}
+  h2{margin:36px 0 10px;font-size:19px;border-bottom:1px solid #d3cec1;padding-bottom:5px}
+  h3{font-size:15px;margin:20px 0 8px}
+  .mut{color:#565b58}
+  code{font-family:ui-monospace,Menlo,monospace;font-size:13px;background:#ebe7dd;padding:1px 5px;border-radius:4px}
+  .note{border-left:3px solid #f15a24;background:#fbf9f4;padding:10px 14px;border-radius:0 8px 8px 0;margin:14px 0}
+  table{border-collapse:collapse;width:100%;font-size:14px}
+  td,th{border-bottom:1px solid #d3cec1;padding:6px 8px;text-align:left;vertical-align:top}
+  th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#565b58}
+  .proto{border:1px solid #d3cec1;border-radius:12px;overflow:hidden;background:#fbf9f4}
+  .tb{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 12px;background:#ebe7dd;border-bottom:1px solid #d3cec1;font-size:12.5px}
+  .tb button{font:inherit;font-size:12.5px;border:1px solid #d3cec1;background:#fbf9f4;color:#141517;border-radius:6px;padding:3px 10px;cursor:pointer}
+  .tb button.on{background:#141517;color:#f4f1ea;border-color:#141517}
+  .legend{padding:10px 14px;font-size:13px;border-top:1px solid #d3cec1;background:#fff}
+  svg.flow text{font:12px Inter,system-ui,sans-serif;fill:#141517}
+  svg.flow .sm{font-size:10.5px;fill:#565b58}
+  svg.flow .b{fill:#fbf9f4;stroke:#d3cec1;stroke-width:1.3}
+  svg.flow .a{fill:#fbf9f4;stroke:#f15a24;stroke-width:1.5}
+  section[data-usine-q]{margin:14px 0}
+
+  /* ---- Mock of the Trema UI (dark, same tokens as ui/web/src/styles.css) ---- */
+  .t{--bg:#0f1115;--panel:#161920;--card:#1b1f27;--line:#2a2f3a;--fg:#e8eaf0;--mut:#8f97a8;--accent:#6c8cff;--ok:#3ecf8e;--ko:#f5594e;--warn:#f0b429;
+     background:var(--bg);color:var(--fg);font:13px/1.45 system-ui,-apple-system,sans-serif;display:flex;min-height:440px;position:relative}
+  .t nav{width:200px;background:var(--panel);border-right:1px solid var(--line);padding:10px;display:flex;flex-direction:column}
+  .t .brand{font-weight:700;padding:4px 8px 10px}.t .brand small{display:block;color:var(--mut);font-weight:400;font-size:11px}
+  .t .sec{color:var(--mut);font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;padding:6px 8px;display:flex;justify-content:space-between;align-items:center}
+  .t .item{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer}
+  .t .item:hover{background:#ffffff0a}.t .item.active{background:#6c8cff22}
+  .t .dot{width:9px;height:9px;border-radius:50%;background:#6b7280;flex:none}.t .dot.up{background:var(--ok)}.t .dot.wait{background:none;border:1.5px dashed var(--mut)}
+  .t .dot.busy{background:var(--accent);animation:pulse 1s infinite}
+  .t .plus{background:none;border:1px solid var(--line);color:var(--fg);border-radius:6px;padding:1px 8px;font:inherit;font-size:11px;cursor:pointer;text-transform:none;letter-spacing:0}
+  .t .plus:hover{border-color:var(--accent);color:var(--accent)}
+  .t .main{flex:1;padding:18px 22px;min-width:0}
+  .t h4{margin:0 0 2px;font-size:19px;display:flex;gap:10px;align-items:center}
+  .t .pill{font-size:11px;padding:1px 9px;border-radius:99px;background:#ffffff0d;border:1px solid var(--line);font-weight:500}
+  .t .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-top:12px}
+  .t pre{margin:6px 0 0;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:8px 10px;font:12px/1.5 ui-monospace,Menlo,monospace;white-space:pre-wrap;color:var(--fg);position:relative}
+  .t .copy{position:absolute;right:6px;top:6px;font-size:11px;padding:1px 8px}
+  .t button.btn{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:5px 12px;color:var(--fg);font:inherit;cursor:pointer}
+  .t button.btn.primary{background:var(--accent);border-color:var(--accent);color:#0b0e16;font-weight:600}
+  .t button.btn:disabled{opacity:.45;cursor:not-allowed}
+  .t input{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:6px 10px;color:var(--fg);font:inherit;width:100%}
+  .t input:focus{outline:2px solid #6c8cff66;border-color:var(--accent)}
+  .t .mut{color:var(--mut)}.t .err{color:var(--ko);font-size:12px}.t .okc{color:var(--ok)}
+  .t .bg{position:absolute;inset:0;background:#000a;display:grid;place-items:center}
+  .t .modal{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;width:min(420px,92%)}
+  .t .modal .act{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+  .t .steps{list-style:none;padding:0;margin:8px 0 0}.t .steps li{display:flex;gap:8px;padding:3px 0;align-items:center}
+  .t .ic{width:16px;text-align:center}
+  .t .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:12px 0 0}.t .tabs span{padding:6px 12px;color:var(--mut)}.t .tabs span.on{color:var(--fg);border-bottom:2px solid var(--accent)}
+  @keyframes pulse{50%{opacity:.35}}
+</style>
+</head>
+<body>
+<main>
+  <div class="kicker">Usine · trema · T-10 · Spec</div>
+  <h1>Initialiser une nouvelle app depuis l'interface</h1>
+  <p class="mut">Aujourd'hui, créer une app impose de lancer <code>trema init</code> depuis le poste local, dans le dossier git de l'app. La commande crée le repo bare sur le VM, copie le hook, écrit le vhost nginx, lance certbot, puis ajoute le remote <code>trema</code> et le fichier <code>trema.env</code> en local. L'objectif est de faire <b>la partie serveur</b> depuis le tableau de bord. L'UI affiche ensuite les commandes à lancer en local pour faire le premier <code>git push trema main</code>.</p>
+
+  <h2>Périmètre proposé</h2>
+  <ul>
+    <li>Un bouton <b>« + Nouvelle app »</b> dans la barre latérale ouvre une fenêtre qui ne demande qu'un champ : le <b>nom</b>. Le domaine est calculé à partir du nom : <code>&lt;nom&gt;.&lt;host&gt;</code>.</li>
+    <li>La création tourne en <b>job asynchrone</b>, comme redémarrer ou redéployer, avec ses étapes et sa sortie suivies en direct (SSE).</li>
+    <li>À la fin, l'app apparaît dans la liste avec l'état <b>« En attente du premier déploiement »</b>. Sa page affiche les commandes à copier pour le poste local.</li>
+    <li>Le premier push suit le chemin actuel : le hook <code>post-receive</code> détecte un <code>docker-compose.yml</code>, sinon il applique le template Rails, puis crée <code>.env</code> et démarre l'app. Rien ne change dans le hook.</li>
+    <li><b>Hors périmètre</b> : supprimer une app depuis l'UI, cloner depuis une URL GitHub, choisir un template de départ (voir Q1).</li>
+  </ul>
+
+  <h2>Prototype</h2>
+  <div class="proto">
+    <div class="tb">
+      <span class="mut">Écran :</span>
+      <button data-s="list" class="on">1. Liste</button>
+      <button data-s="form">2. Formulaire</button>
+      <button data-s="run">3. Création</button>
+      <button data-s="done">4. App en attente</button>
+      <button data-s="fail">Échec certbot</button>
+      <span class="mut" style="margin-left:auto">Le prototype est interactif : tapez un nom, puis « Créer ».</span>
+    </div>
+    <div class="t" id="t">
+      <nav>
+        <div class="brand">▲ Trema<small>vps.nicolasm.fr</small></div>
+        <div class="sec">Apps <button class="plus" id="plus">+ Nouvelle app</button></div>
+        <div id="apps"></div>
+      </nav>
+      <div class="main" id="main"></div>
+      <div class="bg" id="modal" hidden></div>
+    </div>
+    <div class="legend" id="legend"></div>
+  </div>
+
+  <div class="note" data-when="Q2=b">Variante Q2 = b : sur l'écran 4, le bloc de commandes se réduit à <code>trema link &lt;nom&gt;</code> puis <code>git push trema main</code>.</div>
+
+  <h2>Workflow</h2>
+  <svg class="flow" viewBox="0 0 960 300" width="100%" role="img" aria-label="Flux de création">
+    <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="#565b58"/></marker></defs>
+    <text x="10" y="18" class="sm">NAVIGATEUR</text><text x="200" y="18" class="sm">SERVEUR UI (VM, user)</text><text x="520" y="18" class="sm">VM</text><text x="790" y="18" class="sm">POSTE LOCAL</text>
+    <rect class="a" x="10" y="34" width="160" height="50" rx="8"/><text x="22" y="56">Nom saisi</text><text x="22" y="72" class="sm">validation en direct</text>
+    <rect class="b" x="200" y="34" width="260" height="50" rx="8"/><text x="212" y="56">POST /api/apps {name}</text><text x="212" y="72" class="sm">vérifie le nom (repo/app/vhost libres) → 202 + job</text>
+    <rect class="b" x="520" y="30" width="230" height="190" rx="8"/>
+    <text x="532" y="52">1. git init --bare ~/repos/&lt;nom&gt;</text>
+    <text x="532" y="80">2. copie hooks/post-receive</text>
+    <text x="532" y="108">3. vhost ~/…/sites-enabled/&lt;sub&gt;</text>
+    <text x="532" y="136">4. certbot --nginx -d &lt;domaine&gt;</text><text x="548" y="150" class="sm">(sudo restreint, cf. Q3)</text>
+    <text x="532" y="178">5. nginx reload</text>
+    <text x="532" y="206" class="sm">étapes idempotentes, rejouables</text>
+    <rect class="b" x="200" y="120" width="260" height="50" rx="8"/><text x="212" y="142">Job SSE : étapes + sortie</text><text x="212" y="158" class="sm">puis l'app passe en « en attente »</text>
+    <rect class="a" x="790" y="120" width="160" height="70" rx="8"/><text x="802" y="142">Copier les commandes</text><text x="802" y="158" class="sm">git remote add trema …</text><text x="802" y="172" class="sm">+ trema.env (Q2)</text>
+    <rect class="b" x="790" y="238" width="160" height="50" rx="8"/><text x="802" y="260">git push trema main</text><text x="802" y="276" class="sm">→ hook actuel</text>
+    <path d="M170 59H198M460 59H518M520 145H462M910 190V236M790 262H462" stroke="#565b58" fill="none" marker-end="url(#ar)"/>
+    <path d="M420 170V228H850V192" stroke="#565b58" fill="none" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+    <rect class="b" x="200" y="240" width="260" height="44" rx="8"/><text x="212" y="260">~/apps/&lt;nom&gt; créé au 1er push</text><text x="212" y="275" class="sm">l'app passe en « en ligne »</text>
+  </svg>
+
+  <h2>Points techniques</h2>
+  <table>
+    <tr><th>Sujet</th><th>Proposition</th></tr>
+    <tr><td>Nom</td><td>Règle plus stricte que l'actuelle, car le nom sert aussi de sous-domaine : <code>^[a-z0-9][a-z0-9-]{1,39}$</code>. Le nom est refusé s'il existe déjà dans <code>~/repos</code>, <code>~/apps</code> ou un vhost nginx.</td></tr>
+    <tr><td>Liste des apps</td><td>Aujourd'hui, la liste se lit dans <code>~/apps/*</code>, qui n'existe qu'après le premier push. La liste réunira <code>~/repos/*</code> et <code>~/apps/*</code>. Une app qui a un repo mais pas encore de dossier <code>apps</code> a le statut <code>pending</code>.</td></tr>
+    <tr><td>Hook</td><td><code>ui:install</code> envoie aussi <code>hooks/</code> sur le VM. Le serveur UI copie donc toujours la version actuelle du hook.</td></tr>
+    <tr><td>Droits</td><td>L'UI tourne sous l'utilisateur Trema. Le vhost s'écrit déjà sans sudo (le hook le fait). <b>certbot</b> exige root : voir Q3.</td></tr>
+    <tr><td>DNS</td><td>Il faut un enregistrement wildcard <code>*.&lt;host&gt;</code>, sinon certbot échoue. Le message d'erreur l'indique.</td></tr>
+    <tr><td>Sécurité</td><td>Mêmes protections que les autres POST (en-têtes, CSRF, session et TOTP). L'action est inscrite dans <code>audit.log</code>. Une seule création à la fois.</td></tr>
+    <tr><td>Tests</td><td>Tests unitaires de la validation du nom, de la génération du vhost et de la fusion repos/apps. Test d'intégration de la route avec <code>TREMA_HOME</code> et <code>TREMA_NGINX_SITES</code> temporaires, certbot simulé.</td></tr>
+  </table>
+
+  <h2>Questions ouvertes</h2>
+
+  <section data-usine-q="Q1" data-kind="single" data-label="Quel périmètre pour « initialiser une app » ?" data-reco="a">
+    <div data-option="a">Préparer le serveur seulement (équivalent serveur de trema init), puis afficher les commandes pour pousser depuis le poste local</div>
+    <div data-option="b">a + importer un repo depuis une URL Git (le VM clone et déploie, sans passer par le poste local)</div>
+    <div data-option="c">a + créer l'app depuis un template de départ (Rails, Node…)</div>
+  </section>
+  <p class="mut">Recommandation <b>a</b> : la plus petite PR, qui couvre le besoin et garde le flux git actuel. Les options b et c demandent de gérer des identifiants Git ou des templates : elles méritent leurs propres tâches.</p>
+
+  <section data-usine-q="Q2" data-kind="single" data-label="Comment relier le dossier local à l'app créée ?" data-reco="a">
+    <div data-option="a">Afficher un bloc de commandes à copier (git remote add + création de trema.env)</div>
+    <div data-option="b">Ajouter une commande CLI « trema link &lt;app&gt; » qui crée le remote et trema.env, et afficher seulement cette commande</div>
+  </section>
+  <p class="mut">Recommandation <b>a</b> : rien à changer côté CLI. L'option b est plus confortable et peut venir dans une seconde PR.</p>
+
+  <section data-usine-q="Q3" data-kind="single" data-label="Comment l'UI obtient-elle le certificat HTTPS (certbot exige root) ?" data-reco="a">
+    <div data-option="a">ui:install ajoute une règle sudoers restreinte (certbot --nginx et nginx reload uniquement, sans mot de passe)</div>
+    <div data-option="b">L'UI ne lance pas certbot : l'app commence en HTTP, et un bouton ou une commande CLI ajoute HTTPS ensuite</div>
+    <div data-option="c">Passer à un certificat wildcard *.host, obtenu une seule fois à l'installation</div>
+  </section>
+  <p class="mut">Recommandation <b>a</b> : on garde le même comportement que <code>trema init</code>, et la surface root reste limitée à deux commandes. L'option c est plus propre à terme, mais demande un challenge DNS, qui dépend du fournisseur.</p>
+
+  <section data-usine-q="Q4" data-kind="single" data-label="Que faire si une étape échoue (ex. certbot) ?" data-reco="b">
+    <div data-option="a">Annuler automatiquement ce qui a été créé (repo, vhost)</div>
+    <div data-option="b">Garder ce qui est fait, afficher l'erreur et un bouton « Réessayer » (étapes idempotentes)</div>
+  </section>
+  <p class="mut">Recommandation <b>b</b> : l'échec le plus fréquent viendra du DNS. Une fois le DNS corrigé, on relance sans tout refaire.</p>
+
+  <section data-usine-q="Q5" data-kind="single" data-label="Le domaine est-il modifiable à la création ?" data-reco="a">
+    <div data-option="a">Non : toujours &lt;nom&gt;.&lt;host&gt;, comme aujourd'hui</div>
+    <div data-option="b">Oui : un champ facultatif « domaine personnalisé »</div>
+  </section>
+
+  <section data-usine-q="Q6" data-kind="single" data-label="Peut-on saisir des variables d'env avant le premier déploiement ?" data-reco="a">
+    <div data-option="a">Non : l'onglet Env sert après le premier push (le hook crée .env)</div>
+    <div data-option="b">Oui : un champ dans le formulaire. Il faut alors modifier le hook pour fusionner ces valeurs avec le .env généré</div>
+  </section>
+  <p class="mut">Recommandation <b>a</b> : aujourd'hui, si un <code>.env</code> existe déjà, le hook saute la génération des variables Postgres du template Rails. L'option b impose donc de modifier le hook.</p>
+
+  <section data-usine-q="Q7" data-kind="single" data-label="Ajouter aussi « Supprimer l'app » (équivalent de trema destroy) dans cette tâche ?" data-reco="b">
+    <div data-option="a">Oui</div>
+    <div data-option="b">Non, dans une tâche séparée</div>
+  </section>
+</main>
+
+<script>
+(() => {
+  const host = "vps.nicolasm.fr", user = "nicolas";
+  const base = [{n:"blog",s:"up"},{n:"comptes",s:"up"}];
+  let state = {screen:"list", name:"", created:null, fail:false};
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  const valid = (n) => /^[a-z0-9][a-z0-9-]{1,39}$/.test(n);
+  const check = (n) => !n ? "" : !valid(n) ? "Minuscules, chiffres et tirets (2 à 40 caractères)." : base.some((a) => a.n === n) ? "Une app porte déjà ce nom." : "";
+  const STEPS = ["Création du repo git", "Installation du hook de déploiement", "Configuration nginx", "Certificat HTTPS (certbot)", "Rechargement nginx"];
+  const LEG = {
+    list: "Le bouton « + Nouvelle app » s'ajoute à côté du titre « Apps ». Le texte actuel « Créez-en une avec trema init » est remplacé par ce bouton.",
+    form: "Un seul champ. Le nom est validé en direct, et l'aperçu montre le domaine et le remote git qui seront créés.",
+    run: "Job asynchrone, sur le modèle du JobBanner actuel : étapes cochées une à une, sortie brute repliable. La fenêtre peut se fermer, le job continue.",
+    done: "Une fois créée, l'app est en attente (point en pointillés). Sa page affiche les commandes locales. Elle passera en ligne au premier push.",
+    fail: "Cas d'échec (DNS non configuré) : ce qui est fait est gardé, l'erreur est expliquée et un bouton permet de réessayer (Q4)."
+  };
+  function render() {
+    const s = state.screen;
+    document.querySelectorAll(".tb button").forEach((b) => b.classList.toggle("on", b.dataset.s === s));
+    $("legend").textContent = LEG[s];
+    const apps = [...base, ...(state.created ? [{n:state.created, s: state.screen === "run" ? "busy" : "wait"}] : [])];
+    $("apps").innerHTML = apps.map((a) => `<div class="item ${a.n === state.created && (s === "done" || s === "fail") ? "active" : ""}"><span class="dot ${a.s}"></span>${esc(a.n)}</div>`).join("");
+    const m = $("main"), md = $("modal");
+    md.hidden = !(s === "form" || s === "run" || s === "fail");
+    if (s === "list" || s === "form" || s === "run" || s === "fail") {
+      m.innerHTML = `<h4>blog <span class="pill"><span class="okc">●</span> En ligne</span></h4><a style="color:#6c8cff">blog.${host} ↗</a><div class="tabs"><span class="on">Vue d'ensemble</span><span>Logs</span><span>Env</span><span>Déploiements</span></div><div class="card mut">…</div>`;
+    }
+    if (s === "form") {
+      const n = state.name, err = check(n), ok = n && !err;
+      md.innerHTML = `<div class="modal"><b>Nouvelle app</b>
+        <p class="mut" style="margin:4px 0 10px">Prépare le serveur : repo git, hook, domaine HTTPS.</p>
+        <label class="mut" style="font-size:12px">Nom</label>
+        <input id="nm" placeholder="mon-app" value="${esc(n)}" autocomplete="off">
+        <div class="err" style="min-height:18px">${esc(err)}</div>
+        <div class="mut" style="font-size:12px">Domaine : <span style="color:${ok ? "#e8eaf0" : "inherit"}">${ok ? esc(n) : "&lt;nom&gt;"}.${host}</span><br>Remote : <code style="background:none;color:inherit">${user}@${host}:repos/${ok ? esc(n) : "&lt;nom&gt;"}</code></div>
+        <div class="act"><button class="btn" id="cancel">Annuler</button><button class="btn primary" id="go" ${ok ? "" : "disabled"}>Créer</button></div></div>`;
+      const i = $("nm"); i.focus(); i.setSelectionRange(n.length, n.length);
+      i.oninput = () => { state.name = i.value.trim(); render(); };
+      i.onkeydown = (e) => { if (e.key === "Enter" && ok) start(); };
+      $("cancel").onclick = () => go("list"); $("go").onclick = start;
+    }
+    if (s === "run" || s === "fail") {
+      const k = state.step ?? 0, nm = state.created || "mon-app";
+      md.innerHTML = `<div class="modal"><b>Création de ${esc(nm)}</b>
+        <ul class="steps">${STEPS.map((t, i) => {
+          const failed = s === "fail" && i === 3, done = s === "fail" ? i < 3 : i < k, cur = s === "run" && i === k;
+          return `<li><span class="ic ${done ? "okc" : failed ? "err" : "mut"}">${done ? "✓" : failed ? "✕" : cur ? "…" : "○"}</span><span class="${done || cur || failed ? "" : "mut"}">${t}</span></li>`; }).join("")}</ul>
+        ${s === "fail" ? `<div class="err" style="margin-top:8px">certbot : aucun enregistrement DNS pour ${esc(nm)}.${host}. Vérifiez le wildcard *.${host}, puis réessayez.</div>` : ""}
+        <div class="act">${s === "fail" ? `<button class="btn" id="cl">Fermer</button><button class="btn primary" id="retry">Réessayer</button>` : `<button class="btn" id="cl">Continuer en arrière-plan</button>`}</div></div>`;
+      $("cl").onclick = () => go(s === "fail" ? "list" : "done");
+      if ($("retry")) $("retry").onclick = () => { state.screen = "run"; state.step = 3; render(); tickRun(); };
+    }
+    if (s === "done") {
+      const nm = state.created || "mon-app";
+      const cmd = `git remote add trema ${user}@${host}:repos/${nm}\ncat > trema.env <<EOF\nTREMA_HOSTNAME=${host}\nTREMA_USERNAME=${user}\nTREMA_PROJECT_NAME=${nm}\nEOF\ngit push trema main`;
+      m.innerHTML = `<h4>${esc(nm)} <span class="pill"><span class="mut">◌</span> En attente du premier déploiement</span></h4><span class="mut">${esc(nm)}.${host} (HTTPS prêt)</span>
+        <div class="card"><b>Déployer depuis votre poste</b><p class="mut" style="margin:4px 0">Dans le dossier git de l'app :</p>
+        <pre><button class="btn copy">Copier</button>${esc(cmd)}</pre>
+        <p class="mut" style="margin:8px 0 0;font-size:12px">Sans docker-compose.yml dans le repo, le template Rails + Postgres est appliqué. Les onglets Logs, Env et Déploiements s'activent après le premier push.</p></div>`;
+      m.querySelectorAll(".copy").forEach((b) => b.onclick = () => { b.textContent = "Copié ✓"; setTimeout(() => b.textContent = "Copier", 1200); });
+    }
+  }
+  let timer;
+  function tickRun() {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      if (state.screen !== "run") return;
+      state.step = (state.step ?? 0) + 1;
+      if (state.step >= STEPS.length) { state.screen = "done"; state.step = 0; }
+      render(); if (state.screen === "run") tickRun();
+    }, 700);
+  }
+  function start() { state.created = state.name || "mon-app"; state.screen = "run"; state.step = 0; render(); tickRun(); }
+  function go(s) {
+    clearTimeout(timer);
+    if ((s === "run" || s === "done" || s === "fail") && !state.created) state.created = "mon-app";
+    if (s === "list" || s === "form") { if (s === "form") state.name = state.name || ""; if (s === "list") state.created = null; }
+    state.screen = s; if (s === "run") { state.step = 0; tickRun(); }
+    render();
+  }
+  document.querySelectorAll(".tb button").forEach((b) => b.onclick = () => go(b.dataset.s));
+  $("plus").onclick = () => go("form");
+  render();
+})();
+</script>
+</body>
+</html>
