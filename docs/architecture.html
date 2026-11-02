@@ -39,7 +39,7 @@ img{max-width:100%} .tag{display:inline-block;padding:0 8px;border-radius:10px;f
 <li><code>docker compose up --build --force-recreate -d</code>, puis lecture du port publié, écrit dans <code>.env</code> (<code>WEB_PORT</code>) et dans le <code>proxy_pass</code> du vhost, puis redémarrage de nginx.</li>
 <li>Ajoute une ligne (date, commit, durée, résultat) à <code>deploys.log</code>.</li></ol>
 <h3><code>trema env</code> et l'interface</h3>
-<p><code>trema env</code> ouvre <code>.env</code> dans vim sur la VM puis recrée les conteneurs. L'interface web (<code>trema ui:install</code>) est un service systemd Node sans dépendance, écoute sur <code>127.0.0.1:4000</code> ; elle lit les apps, logs, <code>.env</code> et <code>deploys.log</code> et pilote Docker. Accès par tunnel SSH (<code>trema ui</code>) ou HTTPS <code>trema.&lt;hôte&gt;</code> (mot de passe + TOTP).</p>
+<p><code>trema env</code> ouvre <code>.env</code> dans vim sur la VM puis recrée les conteneurs. L'interface web (<code>trema ui:install</code>) est un service systemd Node sans dépendance, écoute sur <code>127.0.0.1:4000</code> ; elle lit les apps, logs, <code>.env</code> et <code>deploys.log</code> et pilote Docker. Accès uniquement en HTTPS <code>trema.&lt;hôte&gt;</code> (mot de passe + TOTP) ; le login est exigé partout sauf avec <code>TREMA_DEV=1</code> (développement).</p>
 <h3><code>trema update</code></h3>
 <p>Recopie <code>docker_compose_files</code>, relance <code>server:setup</code> (rotation des logs Docker, cron de purge de <code>/db_dumps</code>) et recopie le hook de l'app courante. <strong>Les autres apps gardent leur ancien hook</strong> jusqu'à ce qu'on lance <code>update</code> dans chacune.</p>
 <h3><code>trema destroy</code></h3>
@@ -50,7 +50,7 @@ img{max-width:100%} .tag{display:inline-block;padding:0 8px;border-radius:10px;f
 <h2 id="secu">4. Sécurité</h2>
 <ul><li>L'accès à la VM repose sur SSH (clés) ; Trema ne gère aucun compte.</li>
 <li>Les secrets sont dans <code>apps/&lt;app&gt;/.env</code> sur la VM, jamais dans le dépôt.</li>
-<li>L'interface donne accès au socket Docker et aux secrets : mot de passe haché scrypt, TOTP à usage unique, session 7 jours (cookie <code>HttpOnly; Secure; SameSite=Strict</code>), limite de requêtes nginx sur <code>/api/login</code>, blocage par IP, journal <code>audit.log</code>. <code>trema ui:unexpose</code> la ramène au tunnel SSH seul.</li></ul>
+<li>L'interface donne accès au socket Docker et aux secrets : mot de passe haché scrypt, TOTP à usage unique, session 7 jours (cookie <code>HttpOnly; Secure; SameSite=Strict</code>), limite de requêtes nginx sur <code>/api/login</code>, blocage par IP, journal <code>audit.log</code>.</li></ul>
 
 <h2 id="limites">5. Limites (constat)</h2>
 <ul>
@@ -82,7 +82,7 @@ sudo mkdir -p /db_dumps
 # depuis n'importe quel projet git :
 trema init                      # crée dépôt, vhost, certificat, remote, trema.env
 trema update                    # copie les templates, lance server:setup, met à jour le hook
-trema ui:install                # optionnel : interface web
+trema ui:install                # interface web
 git push trema main             # déploie</pre>
 <p><code>update</code> et <code>ui:install</code> lisent <code>trema.env</code>, créé par <code>init</code> : lancez <code>init</code> d'abord. Lancez <code>update</code> une fois par app pour que son hook soit à jour ; les templates sont nécessaires au premier <code>git push</code> (template Rails).</p>
 

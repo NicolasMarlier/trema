@@ -1,5 +1,5 @@
 [Unit]
-Description=Trema dashboard (127.0.0.1 only, public HTTPS via nginx + login)
+Description=Trema dashboard (127.0.0.1 only, HTTPS via nginx + login)
 After=docker.service network.target
 
 [Service]
