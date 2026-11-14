@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>T-15 — Le déploiement manuel reste « en cours » une fois terminé</title>
+<style>
+  :root{color-scheme:light}
+  *{box-sizing:border-box}
+  body{margin:0;font:15px/1.55 Inter,-apple-system,system-ui,sans-serif;background:#f4f1ea;color:#141517}
+  main{max-width:1000px;margin:0 auto;padding:32px 22px 80px}
+  .kicker{letter-spacing:.25em;font-size:11px;text-transform:uppercase;color:#565b58}
+  h1{font-size:28px;margin:4px 0 6px}
+  h2{margin:34px 0 10px;font-size:19px;border-bottom:1px solid #d3cec1;padding-bottom:5px}
+  .mut{color:#565b58}
+  code{font-family:ui-monospace,Menlo,monospace;font-size:13px;background:#ebe7dd;padding:1px 5px;border-radius:4px}
+  .note{border-left:3px solid #f15a24;background:#fbf9f4;padding:10px 14px;border-radius:0 8px 8px 0;margin:14px 0}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:820px){.cols{grid-template-columns:1fr}}
+  .card{background:#fbf9f4;border:1px solid #d3cec1;border-radius:10px;padding:12px 14px}
+  .card h4{margin:0 0 6px;font-size:14px}
+  table{border-collapse:collapse;width:100%;font-size:13.5px}
+  td,th{border-bottom:1px solid #d3cec1;padding:7px 8px;text-align:left;vertical-align:top}
+  th{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#565b58}
+  .seg{display:inline-flex;border:1px solid #d3cec1;border-radius:8px;overflow:hidden;margin:0 10px 12px 0}
+  .seg button{font:inherit;font-size:13px;border:0;background:#fbf9f4;padding:5px 12px;cursor:pointer;color:#141517}
+  .seg button.on{background:#141517;color:#f4f1ea}
+  .btn{font:inherit;font-size:13px;border:1px solid #141517;background:#141517;color:#f4f1ea;padding:5px 12px;border-radius:8px;cursor:pointer}
+  .btn:disabled{opacity:.4;cursor:default}
+  .proto{border:1px solid #d3cec1;border-radius:12px;overflow:hidden;background:#fff;display:grid;grid-template-columns:1fr 230px}
+  @media(max-width:820px){.proto{grid-template-columns:1fr}}
+  .pane{padding:14px 18px;min-height:320px}
+  .srv{background:#ebe7dd;border-left:1px solid #d3cec1;padding:12px;font-size:12.5px}
+  .srv b{display:block;font-size:11px;letter-spacing:.12em;text-transform:uppercase;margin-bottom:6px}
+  .tabs{display:flex;gap:16px;border-bottom:1px solid #d3cec1;margin-bottom:12px;font-size:13.5px}
+  .tabs span{padding:6px 0;color:#565b58}.tabs span.on{color:#141517;border-bottom:2px solid #f15a24;font-weight:600}
+  .job{border:1px solid #d3cec1;border-radius:10px;padding:10px 14px;margin-bottom:12px;background:#fbf9f4}
+  .job.ok{border-color:#2f6b47}.job.failed{border-color:#b4321a}
+  .job .row{display:flex;gap:10px;align-items:center;font-size:14px}
+  .job pre{margin:8px 0 0;max-height:170px;overflow:auto;background:#141517;color:#e9e6dd;padding:8px;border-radius:6px;font-size:12px;white-space:pre-wrap}
+  .bar{height:3px;background:#ebe7dd;border-radius:3px;overflow:hidden;margin-top:8px}
+  .bar div{height:100%;width:30%;background:#f15a24;animation:mv 1.2s infinite linear}
+  @keyframes mv{from{margin-left:-30%}to{margin-left:100%}}
+  .warn{font-size:12px;color:#8a5a00}
+  .tag{font-size:11px;padding:1px 8px;border-radius:99px;border:1px solid #d3cec1;background:#fbf9f4;white-space:nowrap}
+  .tag.ok{color:#2f6b47;border-color:#9cc7ab}.tag.ko{color:#b4321a;border-color:#f15a24}.tag.run{color:#8a5a00;border-color:#e0c27a}
+  .ev{margin:3px 0}
+  svg text{font-family:Inter,-apple-system,system-ui,sans-serif}
+  section[data-usine-q]{margin:14px 0}
+</style>
+</head>
+<body>
+<main>
+  <div class="kicker">Usine · trema · T-15 · Spec</div>
+  <h1>Le déploiement manuel reste « en cours » une fois terminé</h1>
+  <p class="mut">Bug dans l'UI : quand on clique sur « Déployer maintenant » (onglet Source), le bandeau reste sur « ⟳ deploy en cours… » avec le chrono qui tourne, alors que le serveur a déjà terminé. Le déploiement s'est bien fait et apparaît dans <code>deploys.log</code>.</p>
+
+  <h2>Cause probable</h2>
+  <p>L'UI suit le job grâce à un flux SSE (<code>/api/jobs/:id/stream</code>) qui passe par nginx. L'UI ne reçoit la fin du job que par l'événement <code>done</code>. Si la connexion coupe avant, <code>es.onerror</code> ferme le flux <b>sans resynchroniser</b> : l'UI garde l'état <code>running</code> indéfiniment (jusqu'au rechargement de la page).</p>
+  <div class="cols">
+    <div class="card"><h4>① Le hook redémarre nginx (cause principale)</h4>
+      À la fin, <code>hooks/post-receive</code> lance <code>systemctl restart nginx</code>. Ce restart coupe toutes les connexions en cours, y compris le SSE de l'UI. L'événement <code>done</code> part juste après, quand plus personne n'écoute.
+      <div class="mut" style="margin-top:6px">C'est pour ça que seul le déploiement Git/manuel est touché : « Redéployer » (env) et restart/stop ne passent pas par le hook.</div></div>
+    <div class="card"><h4>② Timeout de nginx (aggravant)</h4>
+      Le bloc nginx de l'UI n'a pas de <code>proxy_read_timeout</code> (60 s par défaut) et le serveur n'envoie pas de heartbeat. Si un <code>docker build</code> reste plus d'une minute sans rien afficher, nginx coupe le flux. Le symptôme est le même, pour n'importe quel job long.</div>
+  </div>
+
+  <h2>Séquence actuelle et correction</h2>
+  <svg viewBox="0 0 920 300" width="100%" role="img" aria-label="Séquence">
+    <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="#141517"/></marker>
+    <marker id="o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="#f15a24"/></marker></defs>
+    <g font-size="13" text-anchor="middle" font-weight="600">
+      <rect x="40" y="10" width="140" height="30" rx="8" fill="#fbf9f4" stroke="#d3cec1"/><text x="110" y="30">Navigateur (UI)</text>
+      <rect x="300" y="10" width="140" height="30" rx="8" fill="#fbf9f4" stroke="#d3cec1"/><text x="370" y="30">nginx</text>
+      <rect x="540" y="10" width="140" height="30" rx="8" fill="#fbf9f4" stroke="#d3cec1"/><text x="610" y="30">server.mjs (job)</text>
+      <rect x="760" y="10" width="140" height="30" rx="8" fill="#fbf9f4" stroke="#d3cec1"/><text x="830" y="30">post-receive</text>
+    </g>
+    <g stroke="#d3cec1" stroke-dasharray="4 4"><line x1="110" y1="40" x2="110" y2="290"/><line x1="370" y1="40" x2="370" y2="290"/><line x1="610" y1="40" x2="610" y2="290"/><line x1="830" y1="40" x2="830" y2="290"/></g>
+    <g font-size="12" fill="#141517" stroke="#141517">
+      <line x1="110" y1="65" x2="608" y2="65" marker-end="url(#a)"/><text x="360" y="60" stroke="none" text-anchor="middle">POST source/deploy → job running</text>
+      <line x1="110" y1="95" x2="608" y2="95" marker-end="url(#a)"/><text x="360" y="90" stroke="none" text-anchor="middle">SSE /jobs/:id/stream (sortie en direct)</text>
+      <line x1="610" y1="125" x2="828" y2="125" marker-end="url(#a)"/><text x="720" y="120" stroke="none" text-anchor="middle">fetch + bash hook</text>
+      <line x1="830" y1="160" x2="372" y2="160" marker-end="url(#o)" stroke="#f15a24"/><text x="600" y="155" stroke="none" fill="#b4321a" text-anchor="middle">systemctl restart nginx</text>
+      <text x="240" y="160" stroke="none" fill="#b4321a" text-anchor="middle" font-weight="600">✕ SSE coupé → onerror → close()</text>
+      <line x1="610" y1="195" x2="372" y2="195" marker-end="url(#a)" stroke-dasharray="3 3"/><text x="490" y="190" stroke="none" text-anchor="middle">event: done (perdu)</text>
+      <text x="110" y="222" stroke="none" text-anchor="middle" fill="#b4321a">UI bloquée sur « en cours »</text>
+    </g>
+    <g font-size="12">
+      <rect x="20" y="236" width="880" height="52" rx="8" fill="#fff3ee" stroke="#f15a24"/>
+      <text x="36" y="257" fill="#141517"><tspan font-weight="700">Correction :</tspan> si le flux coupe, l'UI interroge GET /api/jobs/:id (toutes les 2 s, puis moins souvent) jusqu'à un état final, et se rebranche au SSE</text>
+      <text x="36" y="277" fill="#141517">si le job tourne encore. En plus : heartbeat SSE toutes les 20 s, et <tspan font-family="ui-monospace,Menlo,monospace">reload</tspan> au lieu de <tspan font-family="ui-monospace,Menlo,monospace">restart</tspan> de nginx dans le hook (Q1).</text>
+    </g>
+  </svg>
+
+  <h2>Prototype (simulation)</h2>
+  <p class="mut">Lancez un déploiement en mode Avant puis Après. Vers la fin, le hook redémarre nginx et coupe le flux.</p>
+  <div class="seg" id="mode"><button data-m="before" class="on">Avant (bug)</button><button data-m="after">Après (corrigé)</button></div>
+  <button class="btn" id="go">Déployer maintenant</button>
+  <div class="proto" style="margin-top:12px">
+    <div class="pane">
+      <div class="tabs"><span>Vue d'ensemble</span><span>Logs</span><span>Env</span><span class="on">Source</span><span>Déploiements</span></div>
+      <div id="banner"><p class="mut">Aucun job. Cliquez sur « Déployer maintenant ».</p></div>
+      <div class="mut" style="font-size:13px">Dernier déploiement (onglet Déploiements) : <span id="last">a91f02c · il y a 2 j</span></div>
+    </div>
+    <div class="srv"><b>Côté serveur</b><div id="srvstate">job : —</div><div style="margin-top:10px" id="evs"></div></div>
+  </div>
+
+  <h2>Changements proposés</h2>
+  <table>
+    <tr><th>Où</th><th>Quoi</th></tr>
+    <tr><td><code>ui/web/src/jobs.tsx</code></td><td><b>Correctif principal.</b> Si le flux SSE coupe pendant un job <code>running</code>, l'UI ne laisse plus tomber : elle interroge <code>GET /api/jobs/:id</code> jusqu'à obtenir un état final (2 s, puis jusqu'à 10 s), puis déclenche le même traitement que <code>done</code> (toast et rechargement). Si le job tourne encore, elle se rebranche au SSE. Elle resynchronise aussi quand l'onglet du navigateur redevient visible.</td></tr>
+    <tr><td><code>ui/server.mjs</code></td><td>Heartbeat SSE (commentaire <code>: ping</code> toutes les 20 s) pour que nginx ne coupe pas un build silencieux.</td></tr>
+    <tr><td><code>hooks/post-receive</code></td><td><code>systemctl reload nginx</code> au lieu de <code>restart</code> (selon Q1). Un reload suffit pour prendre en compte le nouveau <code>proxy_pass</code>, et il ne coupe pas les connexions ouvertes. Ça profite aussi aux autres apps servies par nginx.</td></tr>
+    <tr><td>Finitions</td><td>Libellé « Déploiement » pour l'action <code>deploy</code> (aujourd'hui « deploy en cours… »). L'onglet Déploiements se recharge à la fin d'un job (Q3).</td></tr>
+    <tr><td>Tests</td><td>La décision « que faire après une coupure » est extraite dans une fonction pure et testée avec <code>node --test</code> : resync, reconnexion, abandon après un 404 (job purgé). Ajout d'un test de syntaxe pour le hook (déjà fait par <code>bash -n</code>).</td></tr>
+  </table>
+  <div class="note">Hors périmètre : rendre les jobs persistants après un redémarrage du service <code>trema-ui</code>. Les jobs restent en mémoire. Si le serveur a redémarré et répond 404, l'UI affiche « état inconnu, voir l'onglet Déploiements » au lieu de tourner sans fin.</div>
+
+  <h2>Questions ouvertes</h2>
+
+  <section data-usine-q="Q1" data-kind="single" data-label="Jusqu'où va le correctif ?" data-reco="c">
+    <div data-option="a">Front seul : resynchronisation après une coupure du SSE</div>
+    <div data-option="b">Front + heartbeat SSE côté serveur</div>
+    <div data-option="c">Front + heartbeat + reload nginx au lieu de restart dans le hook (reco)</div>
+  </section>
+
+  <section data-usine-q="Q2" data-kind="single" data-label="Que montrer pendant la resynchronisation ?" data-reco="a">
+    <div data-option="a">Une mention discrète « connexion interrompue, resynchronisation… » sous le bandeau (reco)</div>
+    <div data-option="b">Rien : resynchronisation silencieuse</div>
+  </section>
+
+  <section data-usine-q="Q3" data-kind="single" data-label="Recharger l'onglet Déploiements à la fin d'un job ?" data-reco="yes">
+    <div data-option="yes">Oui, la nouvelle ligne apparaît tout de suite (reco)</div>
+    <div data-option="no">Non, on garde le rafraîchissement toutes les 30 s</div>
+  </section>
+
+  <section data-usine-q="Q4" data-kind="text" data-label="Pour confirmer la cause : est-ce qu'un rechargement de la page (F5) affiche bien le déploiement comme terminé ?" data-reco="Oui, après F5 le bandeau disparaît et le déploiement apparaît dans l'historique">
+  </section>
+</main>
+
+<script>
+(function(){
+  var mode="before", timers=[], LINES=["Fetching NicolasMarlier/blog@main…","Deployment will start...","🚀 Deploying blog...","Not the first deploy...","🔨 Building and restarting containers...","#5 [web 3/6] RUN npm ci","#8 [web 6/6] RUN npm run build"," ✔ Container blog-web-1  Started","systemctl restart nginx","Applicating listening locally on: 32771","✅ Deployment complete, your app is available on: https://blog.nicolasm.fr"];
+  var $=function(id){return document.getElementById(id)};
+  function clear(){timers.forEach(clearTimeout);timers.forEach(clearInterval);timers=[]}
+  function at(ms,f){timers.push(setTimeout(f,ms))}
+  function ev(t,c){$("evs").insertAdjacentHTML("beforeend",'<div class="ev"><span class="tag '+(c||"")+'">'+t+'</span></div>')}
+  var st;
+  function render(){
+    var run=st.state==="running";
+    var title=(run?"⟳ ":st.state==="ok"?"✓ ":"✕ ")+(mode==="before"?"deploy":"Déploiement")+(run?" en cours…":st.state==="ok"?" terminé":" échoué");
+    $("banner").innerHTML='<div class="job '+st.state+'"><div class="row"><strong>'+title+'</strong><span class="mut">'+st.secs+' s</span></div>'
+      +(run?'<div class="bar"><div></div></div>':'')
+      +(st.warn?'<div class="warn">'+st.warn+'</div>':'')
+      +'<pre>'+st.out.join("\n")+'</pre></div>';
+    $("go").disabled=run;
+  }
+  function start(){
+    clear();$("evs").innerHTML="";
+    st={state:"running",secs:0,out:[],warn:"",connected:true};
+    $("srvstate").innerHTML='job : <span class="tag run">running</span>';
+    ev("SSE connecté");render();
+    timers.push(setInterval(function(){st.secs++;render()},1000));
+    LINES.forEach(function(l,i){at(600*(i+1),function(){
+      if(i===8){st.connected=false;ev("nginx restart → SSE coupé","ko");
+        if(mode==="after"){st.warn="Connexion interrompue, resynchronisation…";render()}}
+      if(st.connected) st.out.push(l);
+      render();
+    })});
+    var end=600*(LINES.length+1);
+    at(end,function(){
+      $("srvstate").innerHTML='job : <span class="tag ok">ok</span>';
+      ev(st.connected?"event: done":"event: done (personne n'écoute)",st.connected?"ok":"ko");
+      $("last").textContent="e44b81d · à l'instant";
+    });
+    if(mode==="after") at(end+1400,function(){
+      ev("GET /api/jobs/:id → ok","ok");
+      st.state="ok";st.warn="";
+      st.out=LINES.slice();
+      timers.forEach(clearInterval);
+      render();
+    });
+  }
+  $("go").onclick=start;
+  $("mode").onclick=function(e){var m=e.target.dataset.m;if(!m)return;mode=m;
+    [].forEach.call($("mode").children,function(b){b.classList.toggle("on",b.dataset.m===m)});
+    clear();$("banner").innerHTML='<p class="mut">Aucun job. Cliquez sur « Déployer maintenant ».</p>';$("evs").innerHTML="";$("srvstate").textContent="job : —";$("go").disabled=false;};
+})();
+</script>
+</body>
+</html>

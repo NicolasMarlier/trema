@@ -361,7 +361,11 @@ async function route(req, res) {
     res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache" });
     res.write(`event: init\ndata: ${JSON.stringify(jobView(job))}\n\n`);
     if (job.state !== "running") return res.end();
-    job.subs.add(res); req.on("close", () => job.subs.delete(res));
+    job.subs.add(res);
+    // Heartbeat: keeps the stream alive through nginx (proxy_read_timeout 60 s by default).
+    const beat = setInterval(() => res.write(": ping\n\n"), 20_000);
+    req.on("close", () => { clearInterval(beat); job.subs.delete(res); });
+    res.on("close", () => clearInterval(beat));
     return;
   }
   const name = parts[2];

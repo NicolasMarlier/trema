@@ -2,13 +2,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, appPath, type Job } from "./api";
 import { formatDuration } from "./format";
 import { useElapsed } from "./ui";
+import { jobTitle, resyncDelay, resyncStep } from "./resync";
 
-export type JobState = Job & { output: string; dismissed?: boolean };
+export type JobState = Job & { output: string; dismissed?: boolean; resyncing?: boolean };
 
 /** Tracks the latest job per app; follows a running one over SSE (survives reloads: re-fetched on mount). */
 export function useJobs(onDone: (j: JobState) => void) {
   const [jobs, setJobs] = useState<Record<string, JobState>>({});
   const sources = useRef(new Map<string, EventSource>());
+  const stopped = useRef(false);
   const doneRef = useRef(onDone);
   doneRef.current = onDone;
 
@@ -29,7 +31,29 @@ export function useJobs(onDone: (j: JobState) => void) {
       es.close(); sources.current.delete(j.id);
       setJobs((m) => { const next = { ...m[j.app], ...v }; doneRef.current(next); return { ...m, [j.app]: next }; });
     });
-    es.onerror = () => { /* server closes the stream at the end; EventSource would retry, so close */ es.close(); sources.current.delete(j.id); };
+    es.onerror = () => {
+      // Stream cut (nginx restart/timeout) or closed by the server: close, then resync from GET /api/jobs/:id.
+      es.close(); sources.current.delete(j.id);
+      if (stopped.current) return;
+      setJobs((m) => m[j.app]?.id === j.id && m[j.app].state === "running" ? { ...m, [j.app]: { ...m[j.app], resyncing: true } } : m);
+      let attempt = 0;
+      const poll = async () => {
+        if (stopped.current) return;
+        let fetched: Job | null = null;
+        try { fetched = await api<Job>(`jobs/${j.id}`); } catch { /* retry */ }
+        const step = resyncStep(fetched);
+        if (step.kind === "retry") { setTimeout(poll, resyncDelay(attempt++)); return; }
+        if (step.kind === "reconnect") {
+          setJobs((m) => m[j.app]?.id === j.id ? { ...m, [j.app]: { ...m[j.app], resyncing: false } } : m);
+          track(step.job); // re-opens the SSE; `init` replaces the output
+          return;
+        }
+        const next = { ...step.job, output: step.job.output ?? "", resyncing: false };
+        setJobs((m) => m[j.app]?.id === j.id ? { ...m, [j.app]: next } : m);
+        doneRef.current(next);
+      };
+      setTimeout(poll, resyncDelay(attempt++));
+    };
   }, []);
 
   const restore = useCallback(async (app: string) => {
@@ -40,11 +64,9 @@ export function useJobs(onDone: (j: JobState) => void) {
   }, [track]);
 
   const dismiss = useCallback((app: string) => setJobs((m) => (m[app] ? { ...m, [app]: { ...m[app], dismissed: true } } : m)), []);
-  useEffect(() => () => sources.current.forEach((e) => e.close()), []);
+  useEffect(() => { stopped.current = false; return () => { stopped.current = true; sources.current.forEach((e) => e.close()); }; }, []);
   return { jobs, track, restore, dismiss };
 }
-
-const TITLE: Record<string, string> = { restart: "Redémarrage", stop: "Arrêt", start: "Démarrage", redeploy: "Redéploiement", create: "Création de l'app" };
 
 export function JobBanner({ job, onDismiss }: { job: JobState; onDismiss: () => void }) {
   const running = job.state === "running";
@@ -56,13 +78,14 @@ export function JobBanner({ job, onDismiss }: { job: JobState; onDismiss: () => 
   return (
     <div className={`job ${job.state}`}>
       <div className="row">
-        <strong>{running ? "⟳ " : job.state === "ok" ? "✓ " : "✕ "}{TITLE[job.action] ?? job.action}{running ? " en cours…" : job.state === "ok" ? " terminé" : " échoué"}</strong>
+        <strong>{running ? "⟳ " : job.state === "ok" ? "✓ " : "✕ "}{jobTitle(job.action)}{running ? " en cours…" : job.state === "ok" ? " terminé" : " échoué"}</strong>
         <span className="mut">{formatDuration(secs)}</span>
         <span className="grow" />
         <button className="ghost" onClick={() => setOpen(!open)}>{open ? "Masquer la sortie" : "Voir la sortie"}</button>
         {!running && <button className="ghost" onClick={onDismiss}>Fermer</button>}
       </div>
       {running && <div className="progress"><div /></div>}
+      {running && job.resyncing && <div className="mut resync">connexion interrompue, resynchronisation…</div>}
       {open && <pre ref={pre}>{job.output || "En attente de la sortie de docker compose…"}</pre>}
     </div>
   );

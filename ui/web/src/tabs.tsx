@@ -188,8 +188,10 @@ export function Env({ app, busy, onRedeploy }: { app: string; busy: boolean; onR
   );
 }
 
-export function Deploys({ app }: { app: string }) {
+export function Deploys({ app, version = 0 }: { app: string; version?: number }) {
   const r = useResource<Deploy[]>(`deploys:${app}`, () => api(appPath(app, "deploys")), 30_000);
+  const first = useRef(true);
+  useEffect(() => { if (first.current) { first.current = false; return; } r.reload(); }, [version]); // eslint-disable-line
   const now = useNow(30_000);
   return (
     <Card title="Déploiements" right={<Refreshing on={r.refreshing} />}>
