@@ -58,7 +58,7 @@ export function SourceTab({ app, busy, onDeploy }: { app: string; busy: boolean;
           <button className="primary" onClick={createApp}>Créer la GitHub App</button>
         </> : <>
           <p className="mut">App : <a href={gh.data.htmlUrl ?? "#"} target="_blank" rel="noreferrer noopener">{gh.data.slug}</a> · webhook <code>{gh.data.webhookUrl}</code> · <button onClick={install}>Installer / choisir des dépôts</button></p>
-          <div className="form">
+          {src.loading ? <div className="stack"><Skeleton h={32} /><Skeleton h={32} /><Skeleton h={32} /></div> : <div className="form">
             <label>Dépôt
               <select value={form.repo} onChange={(e) => pick(e.target.value)}>
                 <option value="">— choisir —</option>
@@ -79,10 +79,10 @@ export function SourceTab({ app, busy, onDeploy }: { app: string; busy: boolean;
             <label className="check"><input type="checkbox" checked={form.alwaysDeploy} disabled={!form.rootDir} onChange={(e) => setForm({ ...form, alwaysDeploy: e.target.checked })} /> Déployer même si le push ne touche pas le dossier racine</label>
             <p className="mut">Tout le dépôt est extrait ; la détection et <code>docker compose</code> (projet <code>{app}</code>) s'exécutent dans le dossier racine. Vaut aussi pour <code>git push trema</code>.</p>
             <div className="actions">
-              <button disabled={!form.repo || !form.branch || saving} className="primary" onClick={save}>Enregistrer</button>
+              <button disabled={src.loading || !form.repo || !form.branch || saving} className="primary" onClick={save}>Enregistrer</button>
               <button disabled={!src.data || busy} onClick={deployNow}>Déployer maintenant</button>
             </div>
-          </div>
+          </div>}
         </>}
       </Card>
       {gh.data.configured && <Card title="Dernières livraisons">
