@@ -194,14 +194,14 @@ export function Deploys({ app }: { app: string }) {
   return (
     <Card title="Déploiements" right={<Refreshing on={r.refreshing} />}>
       {r.error && !r.data ? <ErrorBox error={r.error} onRetry={r.reload} /> :
-        r.loading ? <table><tbody>{[0, 1, 2].map((i) => <tr key={i}><td><Skeleton w={80} /></td><td><Skeleton w={60} /></td><td><Skeleton w={240} /></td></tr>)}</tbody></table> :
+        r.loading ? <table><tbody>{[0, 1, 2].map((i) => <tr key={i}><td><Skeleton w={80} /></td><td><Skeleton w={60} /></td><td><Skeleton w={240} /></td><td><Skeleton w={40} /></td></tr>)}</tbody></table> :
         !r.data?.length ? <div className="empty"><p>Aucun déploiement enregistré.</p><p className="mut">Les déploiements apparaissent après un <code>git push</code>.</p></div> :
         <table>
-          <thead><tr><th>Quand</th><th>Commit</th><th>Message</th><th>Durée</th><th>Résultat</th></tr></thead>
+          <thead><tr><th>Quand</th><th>Commit</th><th>Message</th><th>Source</th><th>Durée</th><th>Résultat</th></tr></thead>
           <tbody>{r.data.map((d) => (
             <tr key={d.date + d.commit}>
               <td title={d.date}>{relativeTime(d.date, now)}</td><td className="mono">{d.commit}</td><td className="msg">{d.message ?? <span className="mut">–</span>}</td>
-              <td>{formatDuration(d.duration)}</td><td><span className={`tag ${d.result === "ok" ? "ok" : "ko"}`}>{d.result === "ok" ? "réussi" : "échoué"}</span></td>
+              <td>{d.source ?? "push"}</td><td>{formatDuration(d.duration)}</td><td><span className={`tag ${d.result === "ok" ? "ok" : "ko"}`}>{d.result === "ok" ? "réussi" : "échoué"}</span></td>
             </tr>
           ))}</tbody>
         </table>}

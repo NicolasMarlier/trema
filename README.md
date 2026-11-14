@@ -33,3 +33,11 @@ Le hook `post-receive` écrit `apps/<app>/deploys.log`.
 
 Depuis le repo trema (branche `main`, arbre propre) : `npm run deploy`.
 Utilise `~/.trema_config` et le code du dossier courant : templates Docker, `server:setup`, build + installation de l'UI, hooks de toutes les apps, vérification HTTPS. Pas de tests lancés (rôle de la CI/Usine) ; s'arrête à la première erreur.
+
+## Déploiement sur push GitHub (T-13)
+
+Onglet **Source** de chaque app : dépôt, branche, dossier racine (monorepo), déploiement automatique.
+- « Créer la GitHub App » (manifest flow) crée une App privée propre à l'instance (permission `contents:read`, événement `push`), puis « Installer » choisit les dépôts. Credentials : `~/trema-ui/github-app.json` et `github-app.pem` (600).
+- Chaque push signé (`POST /api/hooks/github`, HMAC) déclenche un `git fetch` dans `~/repos/<app>` puis le hook `post-receive` habituel. Un push qui ne touche pas le dossier racine est ignoré (sauf case « toujours déployer »). Un push reçu pendant un déploiement est mis en file (le dernier seul).
+- Le dossier racine est stocké dans `git config trema.rootdir` du dépôt nu : `git push trema` le respecte aussi. Compose tourne dans ce dossier avec `COMPOSE_PROJECT_NAME=<app>`.
+- Config par app : `~/trema-ui/sources/<app>.json`. `deploys.log` gagne une colonne source (`push`/`github`/`manual`).
