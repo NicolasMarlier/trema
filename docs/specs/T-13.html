@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>T-13 — Déploiement sur push GitHub + sous-dossier</title>
+<title>T-13 — Déploiement sur push GitHub + sous-dossier (v2 : GitHub App)</title>
 <style>
   :root{color-scheme:light}
   *{box-sizing:border-box}
@@ -21,12 +21,13 @@
   th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#565b58}
   .tag{font-size:11px;padding:1px 8px;border-radius:99px;border:1px solid #d3cec1;background:#fbf9f4;white-space:nowrap}
   .tag.ok{color:#2f6b47;border-color:#9cc7ab}.tag.ko{color:#b4321a;border-color:#f15a24}.tag.sk{color:#565b58}
+  .tag.re{color:#b4321a;border-color:#f15a24;background:#fff3ee}
   .cols{display:grid;grid-template-columns:1fr 1fr;gap:14px}
   @media(max-width:820px){.cols{grid-template-columns:1fr}}
   .card{background:#fbf9f4;border:1px solid #d3cec1;border-radius:10px;padding:12px 14px}
   .card h4{margin:0 0 6px;font-size:14px}
+  .card.pick{border-color:#f15a24}
 
-  /* prototype (Trema UI mock) */
   .proto{border:1px solid #d3cec1;border-radius:12px;overflow:hidden;background:#fff;display:grid;grid-template-columns:190px 1fr}
   @media(max-width:820px){.proto{grid-template-columns:1fr}}
   .side{background:#ebe7dd;border-right:1px solid #d3cec1;padding:12px 10px;font-size:13px}
@@ -34,7 +35,8 @@
   .side button{display:block;width:100%;text-align:left;font:inherit;border:0;background:none;padding:6px 8px;border-radius:6px;cursor:pointer;color:#141517}
   .side button.on{background:#141517;color:#f4f1ea}
   .side small{display:block;font-size:11px;opacity:.7}
-  .pane{padding:14px 18px}
+  .side hr{border:0;border-top:1px solid #d3cec1;margin:8px 0}
+  .pane{padding:14px 18px;min-height:420px}
   .tabs{display:flex;gap:16px;border-bottom:1px solid #d3cec1;margin-bottom:12px;font-size:13.5px}
   .tabs span{padding:6px 0;color:#565b58}
   .tabs span.on{color:#141517;border-bottom:2px solid #f15a24;font-weight:600}
@@ -47,18 +49,27 @@
   .copy{display:flex;gap:6px}.copy code{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:5px 8px}
   .btn{font:inherit;font-size:13px;border:1px solid #d3cec1;background:#fbf9f4;color:#141517;border-radius:6px;padding:4px 10px;cursor:pointer}
   .btn.primary{background:#f15a24;border-color:#f15a24;color:#fff}
+  .btn.dark{background:#141517;border-color:#141517;color:#f4f1ea}
   .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px}
   .box{border:1px dashed #d3cec1;border-radius:8px;padding:10px 12px;margin-top:12px;background:#fbf9f4;font-size:13px}
+  .steps{display:flex;gap:6px;margin:6px 0 14px;flex-wrap:wrap}
+  .steps span{font-size:12px;padding:3px 10px;border-radius:99px;border:1px solid #d3cec1;color:#565b58;background:#fbf9f4}
+  .steps span.done{color:#2f6b47;border-color:#9cc7ab}
+  .steps span.cur{color:#fff;background:#f15a24;border-color:#f15a24}
+  .gh{border:1px solid #d0d7de;border-radius:8px;background:#f6f8fa;padding:12px 14px;font-size:13px;margin-top:8px}
+  .gh b.t{display:block;margin-bottom:6px}
 
   .sim{border:1px solid #d3cec1;border-radius:12px;background:#fbf9f4;padding:14px 16px}
   .sim label{display:inline-flex;gap:6px;align-items:center;margin:3px 14px 3px 0;font:13px ui-monospace,Menlo,monospace}
   .term{background:#0f1115;color:#e8eaf0;font:12.5px/1.6 ui-monospace,Menlo,monospace;padding:12px 14px;border-radius:8px;white-space:pre-wrap;margin-top:10px;min-height:120px}
-  .term .m{color:#8f97a8}.term .ok{color:#3ecf8e}.term .ko{color:#f5594e}.term .w{color:#f0b429}
+  .term .m{color:#8f97a8}.term .ok{color:#3ecf8e}.term .w{color:#f0b429}
 
   svg.flow text{font:12px Inter,system-ui,sans-serif;fill:#141517}
   svg.flow .sm{font-size:10.5px;fill:#565b58}
+  svg.flow .h{font-size:11px;letter-spacing:.15em;fill:#565b58}
   svg.flow .b{fill:#fbf9f4;stroke:#d3cec1;stroke-width:1.3}
   svg.flow .a{fill:#fbf9f4;stroke:#f15a24;stroke-width:1.5}
+  svg.flow .g{fill:#f6f8fa;stroke:#8c959f;stroke-width:1.2}
   svg.flow .l{stroke:#141517;stroke-width:1.3;fill:none}
   svg.flow .d{stroke:#565b58;stroke-width:1.2;stroke-dasharray:5 4;fill:none}
   section[data-usine-q]{margin:14px 0}
@@ -66,90 +77,85 @@
 </head>
 <body>
 <main>
-  <div class="kicker">Usine · trema · T-13 · Spec</div>
-  <h1>Déployer sur push GitHub (façon Vercel), avec sous-dossier racine</h1>
-  <p class="mut">Aujourd'hui, une app Trema se déploie uniquement par <code>git push trema main</code> vers le dépôt nu de la VM. On propose deux ajouts :
-  <b>(1)</b> brancher une app sur un dépôt GitHub et une branche, pour qu'un push sur GitHub la redéploie automatiquement ;
-  <b>(2)</b> un <b>dossier racine</b> par app (ex. <code>backend/</code> ou <code>frontend/</code>), pour qu'un monorepo alimente plusieurs apps Trema.</p>
+  <div class="kicker">Usine · trema · T-13 · Spec v2</div>
+  <h1>Déployer sur push GitHub (façon Vercel), avec dossier racine</h1>
+  <p class="mut">Rappel : une app Trema se déploie aujourd'hui uniquement par <code>git push trema main</code>. La v1 de cette spec proposait un webhook et une deploy key par app, avec un dossier racine (<code>backend/</code>, <code>frontend/</code>) pour qu'un monorepo alimente plusieurs apps. Toutes les recommandations ont été retenues. La v2 répond à la remarque <b>« creuser une GitHub App au lieu du webhook + deploy key »</b>.</p>
 
-  <h2>Proposition</h2>
+  <h2>Décisions (réponses à la v1)</h2>
+  <table>
+    <tr><th>#</th><th>Sujet</th><th>Décision</th></tr>
+    <tr><td>Q1</td><td>Déclencheur</td><td>Webhook GitHub reçu par trema-ui (HTTPS), signé HMAC. <span class="mut">Une GitHub App reste un webhook signé, seule la manière de le configurer change.</span></td></tr>
+    <tr><td>Q2</td><td>Dépôts privés</td><td>Deploy key SSH en lecture seule, une par app. <span class="tag re">rouverte par Q9</span> <span class="mut">Avec une GitHub App, elle est remplacée par un jeton d'installation.</span></td></tr>
+    <tr><td>Q3</td><td>Ce que voit le build</td><td>Tout le dépôt est extrait, compose est lancé depuis le dossier racine (<code>context: ..</code> possible).</td></tr>
+    <tr><td>Q4</td><td>Push hors dossier racine</td><td>Ignoré par défaut, case à cocher par app pour toujours déployer.</td></tr>
+    <tr><td>Q5</td><td><code>git push trema</code></td><td>Toujours autorisé (dépannage, hotfix). Le push GitHub suivant réécrit la branche.</td></tr>
+    <tr><td>Q6</td><td>Compléments d'interface</td><td>Bouton « Déployer maintenant », liste des livraisons du webhook, colonne « Source » dans Déploiements. Pas de création d'app « depuis GitHub ».</td></tr>
+    <tr><td>Q7</td><td>Push pendant un déploiement</td><td>Mis en file : seul le dernier push en attente est déployé.</td></tr>
+    <tr><td>Q8</td><td>Statut ✓/✗ sur le commit</td><td>Pas maintenant. <span class="tag re">rouverte par Q12</span> <span class="mut">Avec une App, il suffit d'une permission en plus, sans token à part.</span></td></tr>
+  </table>
+  <p class="mut">Ces points ne changent pas, quelle que soit la réponse à Q9 : onglet « Source » par app, dossier racine (détection et <code>compose -p &lt;app&gt;</code> dans ce dossier, valable aussi pour <code>git push trema</code>), <code>git fetch</code> vers le dépôt nu existant puis hook <code>post-receive</code> inchangé. Pas de second pipeline.</p>
+
+  <h2>Webhook + deploy key ou GitHub App ?</h2>
   <div class="cols">
-    <div class="card"><h4>① Source GitHub</h4>
-      Nouvel onglet <b>« Source »</b> dans l'UI. On y saisit le dépôt, la branche et le dossier racine. Trema fournit en retour :
+    <div class="card"><h4>A · Webhook + deploy key (v1)</h4>
+      Pour chaque app, l'utilisateur copie trois éléments dans GitHub : l'URL du webhook, le secret et la deploy key.
       <ul style="margin:6px 0 0 18px;padding:0">
-        <li>l'URL du webhook <code>https://trema.&lt;host&gt;/api/hooks/github/&lt;app&gt;</code> et un secret à coller dans GitHub ;</li>
-        <li>pour un dépôt privé, une <b>deploy key</b> en lecture seule, générée par Trema (Q2).</li>
+        <li>✓ Simple à coder, aucun appel à l'API GitHub.</li>
+        <li>✓ Marche sans droits d'admin sur l'organisation (admin du dépôt suffit).</li>
+        <li>✗ Trois copier-coller par app, et deux de plus par dépôt de monorepo.</li>
+        <li>✗ Une deploy key ne sert qu'à un seul dépôt. Un monorepo qui alimente deux apps demande donc deux clés et deux webhooks.</li>
+        <li>✗ Pas d'accès à l'API : pas de sélecteur de dépôt, de liste des branches ou de statut de commit.</li>
       </ul></div>
-    <div class="card"><h4>② Dossier racine</h4>
-      Le hook cherche <code>docker-compose.yml</code>, <code>.env.example</code> et l'app Rails <b>dans ce dossier</b>, et lance <code>docker compose</code> depuis ce dossier. Le réglage vaut pour les deux modes : push GitHub et <code>git push trema</code>.
-      Le nom du projet compose est forcé au nom de l'app (<code>-p &lt;app&gt;</code>). Sinon, deux apps dont le dossier s'appelle <code>backend</code> partageraient les mêmes conteneurs.</div>
+    <div class="card pick"><h4>B · GitHub App propre à l'instance Trema (reco)</h4>
+      On la crée une seule fois depuis Trema, en un clic, grâce au <i>manifest flow</i> de GitHub. On l'installe ensuite sur un compte en choisissant les dépôts.
+      <ul style="margin:6px 0 0 18px;padding:0">
+        <li>✓ Un seul webhook, configuré automatiquement, pour tous les dépôts installés.</li>
+        <li>✓ Dépôts privés lus avec un jeton d'installation valable 1 h. Aucune clé par app.</li>
+        <li>✓ Dans l'onglet Source, le dépôt et la branche se choisissent dans une liste, sans saisie libre.</li>
+        <li>✓ Le statut ✓/✗ sur le commit coûte peu (Q12).</li>
+        <li>✗ Plus de code : JWT RS256 (Node <code>crypto</code>, sans dépendance), échange de jetons, deux callbacks OAuth.</li>
+        <li>✗ Clé privée de l'App à stocker sur la VM. Pour installer l'App sur une organisation, il faut en être admin.</li>
+      </ul></div>
   </div>
-  <div class="note">Principe : <b>on ne crée pas un second pipeline</b>. À la réception du webhook, le serveur de l'UI vérifie la signature HMAC, la branche et les fichiers modifiés. Il fait ensuite un <code>git fetch</code> depuis GitHub vers le dépôt nu existant, puis lance le même hook <code>post-receive</code> qu'un <code>git push trema</code>. L'historique, les logs et les règles de migration restent donc les mêmes.</div>
+  <div class="note">Référence : Coolify propose les deux (« GitHub App » par défaut, « Deploy key » en secours). Pour un Trema mono-utilisateur, on recommande <b>B seule</b> : un seul chemin à maintenir. Si un dépôt ne peut pas recevoir l'App, il reste <code>git push trema</code> (Q5).</div>
 
-  <h2>Schéma — flux d'un push GitHub</h2>
-  <svg class="flow" viewBox="0 0 960 300" width="100%" role="img" aria-label="Flux webhook GitHub vers Trema">
+  <h2>Schéma — GitHub App</h2>
+  <svg class="flow" viewBox="0 0 960 380" width="100%" role="img" aria-label="Flux GitHub App">
     <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="#141517"/></marker></defs>
-    <rect class="b" x="10" y="40" width="160" height="60" rx="8"/><text x="90" y="64" text-anchor="middle">git push origin main</text><text class="sm" x="90" y="82" text-anchor="middle">poste dev / merge PR</text>
-    <rect class="b" x="220" y="40" width="160" height="60" rx="8"/><text x="300" y="64" text-anchor="middle">GitHub</text><text class="sm" x="300" y="82" text-anchor="middle">webhook « push » signé</text>
-    <rect class="a" x="430" y="20" width="230" height="100" rx="8"/><text x="545" y="42" text-anchor="middle">trema-ui · /api/hooks/github/&lt;app&gt;</text>
-    <text class="sm" x="545" y="62" text-anchor="middle">1. signature HMAC (secret de l'app)</text>
-    <text class="sm" x="545" y="78" text-anchor="middle">2. branche = branche configurée ?</text>
-    <text class="sm" x="545" y="94" text-anchor="middle">3. fichiers modifiés sous la racine ? (Q4)</text>
-    <text class="sm" x="545" y="110" text-anchor="middle">→ 202 + job (file d'attente, Q7)</text>
-    <rect class="b" x="720" y="40" width="220" height="60" rx="8"/><text x="830" y="64" text-anchor="middle">git fetch → ~/repos/&lt;app&gt;</text><text class="sm" x="830" y="82" text-anchor="middle">deploy key si privé (Q2)</text>
-    <rect class="b" x="720" y="170" width="220" height="80" rx="8"/><text x="830" y="194" text-anchor="middle">hooks/post-receive (existant)</text><text class="sm" x="830" y="212" text-anchor="middle">checkout → cd &lt;racine&gt;</text><text class="sm" x="830" y="228" text-anchor="middle">compose -p &lt;app&gt; up --build</text><text class="sm" x="830" y="244" text-anchor="middle">deploys.log (+ source)</text>
-    <rect class="b" x="430" y="170" width="230" height="80" rx="8"/><text x="545" y="194" text-anchor="middle">git push trema main</text><text class="sm" x="545" y="212" text-anchor="middle">toujours possible (Q5)</text><text class="sm" x="545" y="228" text-anchor="middle">même hook, même dossier racine</text>
-    <rect class="b" x="220" y="180" width="160" height="60" rx="8"/><text x="300" y="204" text-anchor="middle">UI Trema</text><text class="sm" x="300" y="222" text-anchor="middle">journal du job, onglet Déploiements</text>
-    <path class="l" d="M170,70 H220" marker-end="url(#ar)"/>
-    <path class="l" d="M380,70 H430" marker-end="url(#ar)"/>
-    <path class="l" d="M660,70 H720" marker-end="url(#ar)"/>
-    <path class="l" d="M830,100 V170" marker-end="url(#ar)"/>
-    <path class="d" d="M660,210 H720" marker-end="url(#ar)"/>
-    <path class="d" d="M720,230 C600,280 420,270 380,225" marker-end="url(#ar)"/>
-    <text class="sm" x="10" y="290">Trait plein : nouveau chemin GitHub · pointillés : chemins existants, réutilisés</text>
+    <text class="h" x="10" y="18">UNE FOIS · RÉGLAGES → GITHUB</text>
+    <rect class="b" x="10" y="30" width="170" height="64" rx="8"/><text x="95" y="54" text-anchor="middle">« Créer la GitHub App »</text><text class="sm" x="95" y="72" text-anchor="middle">manifest (perms, webhook URL)</text>
+    <rect class="g" x="225" y="30" width="170" height="64" rx="8"/><text x="310" y="54" text-anchor="middle">github.com</text><text class="sm" x="310" y="72" text-anchor="middle">valider le nom · compte/org</text>
+    <rect class="a" x="440" y="30" width="200" height="64" rx="8"/><text x="540" y="54" text-anchor="middle">callback → trema-ui</text><text class="sm" x="540" y="72" text-anchor="middle">stocke App ID, clé .pem, secret</text>
+    <rect class="g" x="685" y="30" width="120" height="64" rx="8"/><text x="745" y="54" text-anchor="middle">Installer</text><text class="sm" x="745" y="72" text-anchor="middle">choix des dépôts</text>
+    <rect class="a" x="840" y="30" width="110" height="64" rx="8"/><text x="895" y="54" text-anchor="middle">setup URL</text><text class="sm" x="895" y="72" text-anchor="middle">installation_id</text>
+    <path class="l" d="M180,62 H225" marker-end="url(#ar)"/><path class="l" d="M395,62 H440" marker-end="url(#ar)"/><path class="l" d="M640,62 H685" marker-end="url(#ar)"/><path class="l" d="M805,62 H840" marker-end="url(#ar)"/>
+
+    <text class="h" x="10" y="140">PAR APP · ONGLET SOURCE</text>
+    <rect class="b" x="10" y="152" width="300" height="50" rx="8"/><text x="160" y="174" text-anchor="middle">Dépôt ▾ (liste API) · Branche ▾ · Dossier racine</text><text class="sm" x="160" y="191" text-anchor="middle">plusieurs apps peuvent pointer le même dépôt</text>
+
+    <text class="h" x="10" y="240">À CHAQUE PUSH</text>
+    <rect class="g" x="10" y="252" width="150" height="64" rx="8"/><text x="85" y="276" text-anchor="middle">push sur GitHub</text><text class="sm" x="85" y="294" text-anchor="middle">event « push » de l'App</text>
+    <rect class="a" x="200" y="244" width="250" height="80" rx="8"/><text x="325" y="266" text-anchor="middle">POST /api/hooks/github</text>
+    <text class="sm" x="325" y="284" text-anchor="middle">1. HMAC (secret de l'App)</text>
+    <text class="sm" x="325" y="299" text-anchor="middle">2. apps où dépôt + branche correspondent</text>
+    <text class="sm" x="325" y="314" text-anchor="middle">3. filtre dossier racine (Q4) → file (Q7)</text>
+    <rect class="b" x="490" y="252" width="200" height="64" rx="8"/><text x="590" y="276" text-anchor="middle">jeton d'installation</text><text class="sm" x="590" y="294" text-anchor="middle">JWT → token 1 h (non stocké)</text>
+    <rect class="b" x="730" y="244" width="220" height="80" rx="8"/><text x="840" y="266" text-anchor="middle">git fetch https → ~/repos/&lt;app&gt;</text><text class="sm" x="840" y="284" text-anchor="middle">puis hooks/post-receive (existant)</text><text class="sm" x="840" y="299" text-anchor="middle">cd &lt;racine&gt; · compose -p &lt;app&gt;</text><text class="sm" x="840" y="314" text-anchor="middle">(Q12) statut ✓/✗ sur le commit</text>
+    <path class="l" d="M160,284 H200" marker-end="url(#ar)"/><path class="l" d="M450,284 H490" marker-end="url(#ar)"/><path class="l" d="M690,284 H730" marker-end="url(#ar)"/>
+    <path class="d" d="M840,324 C840,360 600,365 590,330" marker-end="url(#ar)"/><text class="sm" x="600" y="370">Pointillés : retour de statut, optionnel (Q12)</text>
   </svg>
 
-  <h2>Prototype — onglet « Source » (interactif)</h2>
-  <p class="mut">Exemple de monorepo <code>acme/shop</code> qui alimente deux apps Trema. Changez d'app, de mode ou de dossier racine. Le simulateur plus bas en tient compte.</p>
+  <h2>Prototype (interactif)</h2>
+  <p class="mut">Le monorepo <code>acme/shop</code> alimente deux apps. Choisissez la variante, puis parcourez « Réglages → GitHub » et l'onglet « Source » d'une app.</p>
+  <div class="seg" id="variant"><button data-v="app">B · GitHub App</button><button data-v="hook">A · Webhook + deploy key</button></div>
   <div class="proto">
     <div class="side">
       <div class="brand">TREMA</div>
       <div id="apps"></div>
-      <button class="mut">+ Nouvelle app</button>
+      <hr>
+      <button data-settings="1" id="setBtn">⚙ Réglages · GitHub<small id="setSub"></small></button>
     </div>
-    <div class="pane">
-      <div class="tabs"><span>Vue d'ensemble</span><span>Logs</span><span>Env</span><span>Déploiements</span><span class="on">Source</span></div>
-      <div class="seg" id="mode"><button data-m="push">git push trema</button><button data-m="gh">GitHub</button></div>
-      <div id="pushPane">
-        <div class="form">
-          <span>Dossier racine</span><input type="text" class="root" placeholder="(racine du dépôt)">
-          <span class="hint">Appliqué au prochain <code>git push trema main</code>.</span>
-        </div>
-        <div class="box">Mode actuel : déploiement uniquement par <code>git push trema main</code>.</div>
-      </div>
-      <div id="ghPane">
-        <div class="form">
-          <span>Dépôt</span><input type="text" id="repo" value="github.com/acme/shop">
-          <span>Branche</span><select id="branch"><option>main</option><option>production</option></select>
-          <span>Dossier racine</span><input type="text" class="root" placeholder="(racine du dépôt)">
-          <span class="hint">Seul ce dossier compte pour la détection (compose / Rails) et le build.</span>
-          <span>Déploiement auto</span><label><input type="checkbox" id="auto" checked> à chaque push sur la branche</label>
-          <span>Filtre</span><label><input type="checkbox" id="filter" checked> ignorer les push qui ne touchent pas le dossier racine</label>
-          <span>Webhook URL</span><div class="copy"><code id="hookUrl"></code><button class="btn">Copier</button></div>
-          <span>Secret</span><div class="copy"><code>whsec_•••••••••••••••</code><button class="btn">Voir</button><button class="btn">Régénérer</button></div>
-        </div>
-        <div class="box" data-when="Q2=a"><b>Dépôt privé — deploy key</b> (lecture seule) à ajouter dans GitHub → Settings → Deploy keys :<div class="copy" style="margin-top:6px"><code>ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI… trema-<span class="an"></span></code><button class="btn">Copier</button></div></div>
-        <div class="box" data-when="Q2=b"><b>Dépôt privé — token GitHub</b> global (fine-grained, lecture « Contents ») stocké dans <code>~/trema-ui</code>, partagé par toutes les apps.</div>
-        <div class="box" data-when="Q2=c"><b>Dépôts publics uniquement</b> pour cette version.</div>
-        <div class="row">
-          <button class="btn primary">Enregistrer</button>
-          <button class="btn">Déployer maintenant (dernier commit de la branche)</button>
-          <button class="btn">Tester la connexion</button>
-        </div>
-        <h3>Dernières livraisons du webhook</h3>
-        <table><thead><tr><th>Quand</th><th>Commit</th><th>Résultat</th></tr></thead><tbody id="deliv"></tbody></table>
-      </div>
-    </div>
+    <div class="pane" id="pane"></div>
   </div>
 
   <h3>Simulateur — un push sur GitHub, quelles apps redéploient ?</h3>
@@ -162,140 +168,182 @@
     <div class="term" id="out"></div>
   </div>
 
-  <h2>Changements par composant</h2>
+  <h2>Changements par composant (variante B)</h2>
   <table>
     <tr><th>Composant</th><th>Changement</th></tr>
-    <tr><td><code>hooks/post-receive</code></td><td>Lit le dossier racine dans la config du dépôt nu (<code>git config trema.rootdir</code>). Détection et <code>docker compose</code> se font dans ce dossier, avec <code>-p &lt;app&gt;</code>. La source (<code>push</code>, <code>github</code>, <code>manual</code>) est ajoutée dans <code>deploys.log</code>. Les apps existantes doivent passer par <code>trema update</code>, comme pour toute évolution du hook.</td></tr>
-    <tr><td><code>ui/server.mjs</code></td><td>Nouvelle route publique <code>POST /api/hooks/github/:app</code>. Elle ne demande ni login ni <code>X-Trema</code>, mais exige une signature <code>X-Hub-Signature-256</code> valide. S'ajoutent des routes <code>GET/PUT /api/apps/:app/source</code> et <code>POST …/deploy</code>. Le déploiement passe par le système de jobs existant (verrou par app).</td></tr>
-    <tr><td>nginx (vhost <code>trema.&lt;host&gt;</code>)</td><td>Limite de requêtes sur <code>/api/hooks/</code>. Taille de corps limitée (le payload GitHub dépasse rarement quelques centaines de Ko).</td></tr>
-    <tr><td>Stockage</td><td>Config par app dans <code>~/trema-ui/sources/&lt;app&gt;.json</code> (dépôt, branche, racine, options, secret haché ou chiffré). Deploy key dans <code>~/trema-ui/keys/&lt;app&gt;</code> (Q2=a).</td></tr>
-    <tr><td>UI React</td><td>Onglet « Source », colonne « Source » dans « Déploiements ». En option, création d'app « depuis GitHub » (Q6).</td></tr>
-    <tr><td>Tests</td><td>Vérification de la signature, filtre branche et chemins (logique pure), lecture de la config, et parsing de <code>deploys.log</code> avec la nouvelle colonne (rétro-compatible).</td></tr>
+    <tr><td><code>hooks/post-receive</code></td><td>Comme en v1 : il lit le dossier racine (<code>git config trema.rootdir</code>), lance <code>compose -p &lt;app&gt;</code> dans ce dossier et écrit la source dans <code>deploys.log</code>.</td></tr>
+    <tr><td><code>ui/server.mjs</code></td><td>Routes publiques, protégées par signature ou par <code>state</code> : <code>POST /api/hooks/github</code> (un seul webhook pour l'App), plus les callbacks du manifest et de l'installation. Routes protégées : création de l'App, liste des dépôts et branches installés, <code>GET/PUT /api/apps/:app/source</code>, <code>POST …/deploy</code>. Le déploiement passe par les jobs existants.</td></tr>
+    <tr><td>Session</td><td>Le cookie est <code>SameSite=Strict</code> : il n'est pas envoyé au retour depuis github.com. Les callbacks sont donc validés par un <code>state</code> à usage unique, puis redirigent vers l'UI, où la session est de nouveau présente.</td></tr>
+    <tr><td>Stockage</td><td><code>~/trema-ui/github-app.json</code> (App ID, slug, secret du webhook, installations) et <code>github-app.pem</code> (droits 600). Config de chaque app dans <code>~/trema-ui/sources/&lt;app&gt;.json</code>. Aucun jeton n'est stocké.</td></tr>
+    <tr><td>nginx</td><td>Limite de requêtes et de taille de corps sur <code>/api/hooks/</code> et les callbacks.</td></tr>
+    <tr><td>UI React</td><td>Écran « Réglages → GitHub » (créer l'App, l'installer, voir les installations), onglet « Source », colonne « Source » dans Déploiements.</td></tr>
+    <tr><td>Tests</td><td>Signature HMAC, JWT de l'App (avec une clé de test), choix des apps concernées par un push (dépôt, branche, dossier racine) et parsing de <code>deploys.log</code> rétro-compatible.</td></tr>
   </table>
-  <p class="mut"><b>Hors périmètre</b> : déploiements de preview par branche ou PR, GitHub App/OAuth, statut ✓/✗ renvoyé sur le commit (voir Q8), autres forges (GitLab…).</p>
+  <p class="mut"><b>Hors périmètre</b> : previews par branche ou PR, autres forges, App publique proposée à d'autres utilisateurs.</p>
 
   <h2>Questions ouvertes</h2>
 
-  <section data-usine-q="Q1" data-kind="single" data-label="Comment GitHub déclenche-t-il le déploiement ?" data-reco="a">
-    <div data-option="a">Webhook GitHub → trema-ui (déjà exposé en HTTPS), signé HMAC — reco</div>
-    <div data-option="b">GitHub Actions dans le repo qui fait « git push trema » (exige de stocker une clé SSH de la VM dans GitHub)</div>
-    <div data-option="c">Polling de la branche par Trema toutes les N minutes (aucune entrée publique, mais latence)</div>
+  <section data-usine-q="Q9" data-kind="single" data-label="Mécanisme de connexion à GitHub ?" data-reco="b">
+    <div data-option="a">Webhook + deploy key par app (v1)</div>
+    <div data-option="b">GitHub App propre à l'instance, seule (remplace la deploy key) — reco</div>
+    <div data-option="c">GitHub App par défaut + webhook/deploy key en secours (double chemin, comme Coolify)</div>
   </section>
 
-  <section data-usine-q="Q2" data-kind="single" data-label="Accès aux dépôts privés ?" data-reco="a">
-    <div data-option="a">Deploy key SSH lecture seule générée par Trema, une par app — reco</div>
-    <div data-option="b">Un token GitHub global (fine-grained) pour toutes les apps</div>
-    <div data-option="c">Dépôts publics uniquement pour l'instant</div>
+  <section data-usine-q="Q10" data-kind="single" data-label="(Si GitHub App) Comment l'App est-elle créée ?" data-reco="a">
+    <div data-option="a">Un clic depuis Trema via le manifest flow : GitHub renvoie App ID, clé et secret automatiquement — reco</div>
+    <div data-option="b">À la main sur github.com, puis l'utilisateur colle App ID + clé privée + secret dans Trema</div>
   </section>
 
-  <section data-usine-q="Q3" data-kind="single" data-label="Que voit le build quand un dossier racine est défini ?" data-reco="b">
-    <div data-option="a">Uniquement le contenu du dossier (isolé, comme si c'était la racine du repo)</div>
-    <div data-option="b">Tout le repo est extrait, compose est lancé depuis le dossier : un « context: .. » peut référencer du code partagé — reco</div>
+  <section data-usine-q="Q11" data-kind="single" data-label="(Si GitHub App) Sur quel(s) compte(s) l'App peut-elle être installée ?" data-reco="b">
+    <div data-option="a">Uniquement le compte perso qui la crée (App privée)</div>
+    <div data-option="b">Au choix, compte perso ou organisation lors de la création (App privée, un propriétaire) — reco</div>
+    <div data-option="c">App « publique » installable sur plusieurs comptes et orgs à la fois</div>
   </section>
 
-  <section data-usine-q="Q4" data-kind="single" data-label="Push qui ne touche pas le dossier racine ?" data-reco="a">
-    <div data-option="a">Ignoré par défaut (case à cocher par app pour toujours déployer) — reco</div>
-    <div data-option="b">Toujours déployer</div>
-  </section>
-
-  <section data-usine-q="Q5" data-kind="single" data-label="Quand une app est branchée sur GitHub, « git push trema » reste-t-il autorisé ?" data-reco="a">
-    <div data-option="a">Oui (dépannage, hotfix) ; le prochain push GitHub réécrit la branche — reco</div>
-    <div data-option="b">Non : le hook refuse les push directs, GitHub est la seule source</div>
-  </section>
-
-  <section data-usine-q="Q6" data-kind="multi" data-label="Quels compléments d'interface inclure dans cette tâche ?" data-reco="a,b,c">
-    <div data-option="a">Bouton « Déployer maintenant » (dernier commit de la branche)</div>
-    <div data-option="b">Liste des dernières livraisons du webhook (acceptée / ignorée + raison)</div>
-    <div data-option="c">Colonne « Source » (push / github / manuel) dans Déploiements</div>
-    <div data-option="d">Création d'app directement « depuis GitHub » dans la modale Nouvelle app</div>
-  </section>
-
-  <section data-usine-q="Q7" data-kind="single" data-label="Push reçu pendant un déploiement en cours ?" data-reco="a">
-    <div data-option="a">Mis en file : seul le dernier push en attente est déployé à la fin du job — reco</div>
-    <div data-option="b">Rejeté (409) : il faudra redéployer à la main</div>
-  </section>
-
-  <section data-usine-q="Q8" data-kind="single" data-label="Renvoyer le statut du déploiement (✓/✗) sur le commit GitHub ?" data-reco="a">
-    <div data-option="a">Pas maintenant (demande un token en écriture) — reco</div>
-    <div data-option="b">Oui, dans cette tâche</div>
+  <section data-usine-q="Q12" data-kind="single" data-label="(Si GitHub App) Statut ✓/✗ du déploiement sur le commit GitHub ?" data-reco="b">
+    <div data-option="a">Toujours pas (décision Q8 maintenue, permission non demandée)</div>
+    <div data-option="b">Demander la permission « Commit statuses » dès la création de l'App, implémenter plus tard — reco</div>
+    <div data-option="c">L'implémenter dans cette tâche</div>
   </section>
 </main>
 
 <script>
 (function(){
   var apps=[
-    {name:"shop-api",root:"backend",mode:"gh",branch:"main",auto:true,filter:true},
-    {name:"shop-web",root:"frontend",mode:"gh",branch:"main",auto:true,filter:true},
-    {name:"blog",root:"",mode:"push",branch:"main",auto:true,filter:true}
+    {name:"shop-api",root:"backend",mode:"gh",repo:"acme/shop",branch:"main",auto:true,filter:true},
+    {name:"shop-web",root:"frontend",mode:"gh",repo:"acme/shop",branch:"main",auto:true,filter:true},
+    {name:"blog",root:"",mode:"push",repo:"",branch:"main",auto:true,filter:true}
   ];
+  var repos=["acme/shop","acme/blog","nicolas/dotfiles"];
   var files=["backend/app/models/order.rb","frontend/src/App.tsx","shared/types.ts","README.md"];
-  var sel={app:0,files:{"backend/app/models/order.rb":true},br:"main"};
+  var st={variant:"app",view:0,step:2,files:{"backend/app/models/order.rb":true},br:"main"};
   var $=function(s){return document.querySelector(s)},$$=function(s){return document.querySelectorAll(s)};
-
   function norm(r){return (r||"").replace(/^\/+|\/+$/g,"")}
+  function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+
   function decide(a){
-    if(a.mode!=="gh") return {k:"sk",t:"non branchée sur GitHub"};
-    if(!a.auto) return {k:"sk",t:"déploiement auto désactivé"};
-    if(sel.br!==a.branch) return {k:"sk",t:"branche "+sel.br+" ≠ "+a.branch};
-    var ch=files.filter(function(f){return sel.files[f]});
-    if(!ch.length) return {k:"sk",t:"aucun fichier modifié"};
+    if(a.mode!=="gh") return "non branchée sur GitHub";
+    if(st.variant==="app"&&st.step<2) return "GitHub App non installée";
+    if(a.repo!=="acme/shop") return "autre dépôt ("+(a.repo||"—")+")";
+    if(!a.auto) return "déploiement auto désactivé";
+    if(st.br!==a.branch) return "branche "+st.br+" ≠ "+a.branch;
+    var ch=files.filter(function(f){return st.files[f]});
+    if(!ch.length) return "aucun fichier modifié";
     var r=norm(a.root);
-    if(a.filter&&r){
-      var hit=ch.filter(function(f){return f.indexOf(r+"/")===0});
-      if(!hit.length) return {k:"sk",t:"aucun changement sous "+r+"/"};
-    }
-    return {k:"ok",t:"déploiement lancé"};
+    if(a.filter&&r&&!ch.some(function(f){return f.indexOf(r+"/")===0})) return "aucun changement sous "+r+"/";
+    return null;
   }
+
   function renderSide(){
     $("#apps").innerHTML=apps.map(function(a,i){
-      return '<button data-i="'+i+'" class="'+(i===sel.app?"on":"")+'">'+a.name+'<small>'+(a.mode==="gh"?"GitHub · "+(norm(a.root)||"/"):"git push")+'</small></button>';
+      return '<button data-i="'+i+'" class="'+(st.view===i?"on":"")+'">'+a.name+'<small>'+(a.mode==="gh"?"GitHub · "+(norm(a.root)||"/"):"git push")+'</small></button>';
     }).join("");
+    var sb=$("#setBtn");sb.classList.toggle("on",st.view==="settings");
+    sb.style.display=st.variant==="app"?"":"none";
+    $("#setSub").textContent=["non configurée","App créée · à installer","installée · 2 dépôts"][st.step];
   }
-  function renderPane(){
-    var a=apps[sel.app];
-    $$("#mode button").forEach(function(b){b.classList.toggle("on",b.dataset.m===a.mode)});
-    $("#pushPane").style.display=a.mode==="push"?"":"none";
-    $("#ghPane").style.display=a.mode==="gh"?"":"none";
-    $$(".root").forEach(function(i){i.value=a.root});
-    $("#branch").value=a.branch;$("#auto").checked=a.auto;$("#filter").checked=a.filter;
-    $("#hookUrl").textContent="https://trema.example.fr/api/hooks/github/"+a.name;
-    $$(".an").forEach(function(s){s.textContent=a.name});
+
+  function settingsPane(){
+    var s=st.step,h='<div class="tabs"><span class="on">GitHub</span><span>Accès</span><span>Audit</span></div>';
+    h+='<div class="steps"><span class="'+(s>0?"done":"cur")+'">1 · Créer l\'App</span><span class="'+(s>1?"done":s===1?"cur":"")+'">2 · Installer</span><span class="'+(s>1?"cur":"")+'">3 · Brancher les apps</span></div>';
+    if(s===0){
+      h+='<p>Trema crée <b>sa propre</b> GitHub App. Son webhook pointe vers <code>https://trema.example.fr/api/hooks/github</code>, avec les permissions <i>Contents: read</i> et <i>Metadata: read</i>, plus <i>Commit statuses: write</i> si Q12=b/c.</p>';
+      h+='<div class="form"><span>Propriétaire</span><select><option>nicolas (compte perso)</option><option>acme (organisation)</option></select><span class="hint">Selon Q11.</span><span>Nom</span><input type="text" value="trema-nicolasm"></div>';
+      h+='<div class="row"><button class="btn primary" data-act="create">Créer la GitHub App →</button><span class="mut" style="font-size:12px">ouvre github.com, puis retour automatique</span></div>';
+      h+='<div class="gh"><b class="t">Aperçu github.com : « Create GitHub App for nicolas »</b>Trema va créer une App nommée <b>trema-nicolasm</b> avec les permissions ci-dessus. <button class="btn dark" data-act="create" style="margin-left:6px">Create GitHub App</button></div>';
+    }else if(s===1){
+      h+='<div class="box">✓ App <b>trema-nicolasm</b> créée (ID 912345). La clé privée et le secret du webhook sont enregistrés sur la VM.</div>';
+      h+='<div class="row"><button class="btn primary" data-act="install">Installer sur GitHub →</button></div>';
+      h+='<div class="gh"><b class="t">Aperçu github.com : « Install trema-nicolasm »</b><label><input type="radio" name="sc"> All repositories</label><br><label><input type="radio" name="sc" checked> Only select repositories : <code>acme/shop</code>, <code>acme/blog</code></label><div style="margin-top:8px"><button class="btn dark" data-act="install">Install</button></div></div>';
+    }else{
+      h+='<table><thead><tr><th>Installation</th><th>Dépôts</th><th></th></tr></thead><tbody><tr><td>acme (org)</td><td><code>acme/shop</code>, <code>acme/blog</code></td><td><button class="btn">Gérer sur GitHub ↗</button></td></tr></tbody></table>';
+      h+='<h3>Dernières livraisons (toutes apps)</h3><table><tbody>'+
+        '<tr><td>il y a 3 min</td><td><code>acme/shop@a1f9c02</code></td><td><span class="tag ok">shop-api déployée</span> <span class="tag sk">shop-web ignorée · rien sous frontend/</span></td></tr>'+
+        '<tr><td>hier</td><td><code>acme/shop@0c3d9e8</code></td><td><span class="tag ko">shop-web échec · build</span></td></tr></tbody></table>';
+      h+='<div class="row"><button class="btn" data-act="reset">↺ Rejouer la mise en place</button></div>';
+    }
+    return h;
+  }
+
+  function sourcePane(a){
     var r=norm(a.root)||"/";
-    $("#deliv").innerHTML=
-      '<tr><td>il y a 3 min</td><td><code>a1f9c02</code></td><td><span class="tag ok">déployé</span></td></tr>'+
-      '<tr><td>il y a 1 h</td><td><code>77be410</code></td><td><span class="tag sk">ignoré · rien sous '+r+'</span></td></tr>'+
-      '<tr><td>hier</td><td><code>0c3d9e8</code></td><td><span class="tag ko">échec · migration</span></td></tr>';
+    var h='<div class="tabs"><span>Vue d\'ensemble</span><span>Logs</span><span>Env</span><span>Déploiements</span><span class="on">Source</span></div>';
+    h+='<div class="seg" id="mode"><button data-m="push" class="'+(a.mode==="push"?"on":"")+'">git push trema</button><button data-m="gh" class="'+(a.mode==="gh"?"on":"")+'">GitHub</button></div>';
+    if(a.mode==="push"){
+      return h+'<div class="form"><span>Dossier racine</span><input type="text" class="root" value="'+esc(a.root)+'" placeholder="(racine du dépôt)"><span class="hint">Appliqué au prochain <code>git push trema main</code>.</span></div><div class="box">Déploiement uniquement par <code>git push trema main</code>.</div>';
+    }
+    if(st.variant==="app"&&st.step<2){
+      return h+'<div class="box">Aucune GitHub App installée. <button class="btn primary" data-settings="1">Configurer dans Réglages → GitHub</button></div>';
+    }
+    h+='<div class="form">';
+    if(st.variant==="app"){
+      h+='<span>Dépôt</span><select id="repo">'+['<option value="">— choisir —</option>'].concat(repos.map(function(x){return '<option'+(x===a.repo?" selected":"")+'>'+x+'</option>'})).join("")+'</select><span class="hint">Dépôts accessibles par l\'installation. Privés compris, sans clé.</span>';
+      h+='<span>Branche</span><select id="branch">'+["main","production","feature/x"].map(function(b){return '<option'+(b===a.branch?" selected":"")+'>'+b+'</option>'}).join("")+'</select>';
+    }else{
+      h+='<span>Dépôt</span><input type="text" id="repoTxt" value="github.com/'+esc(a.repo)+'">';
+      h+='<span>Branche</span><input type="text" id="branchTxt" value="'+esc(a.branch)+'">';
+    }
+    h+='<span>Dossier racine</span><input type="text" class="root" value="'+esc(a.root)+'" placeholder="(racine du dépôt)"><span class="hint">Détection (compose / Rails) et build dans ce dossier.</span>';
+    h+='<span>Déploiement auto</span><label><input type="checkbox" id="auto"'+(a.auto?" checked":"")+'> à chaque push sur la branche</label>';
+    h+='<span>Filtre</span><label><input type="checkbox" id="filter"'+(a.filter?" checked":"")+'> ignorer les push qui ne touchent pas le dossier racine</label>';
+    if(st.variant==="hook"){
+      h+='<span>Webhook URL</span><div class="copy"><code>https://trema.example.fr/api/hooks/github/'+a.name+'</code><button class="btn">Copier</button></div>';
+      h+='<span>Secret</span><div class="copy"><code>whsec_•••••••••••</code><button class="btn">Voir</button></div>';
+      h+='<span>Deploy key</span><div class="copy"><code>ssh-ed25519 AAAAC3Nza… trema-'+a.name+'</code><button class="btn">Copier</button></div>';
+    }
+    h+='</div>';
+    if(st.variant==="hook") h+='<div class="box">À coller dans GitHub → Settings → Webhooks <b>et</b> → Deploy keys, pour <b>chaque</b> app (2 apps sur acme/shop = 2 webhooks + 2 clés).</div>';
+    h+='<div class="row"><button class="btn primary">Enregistrer</button><button class="btn">Déployer maintenant</button></div>';
+    h+='<h3>Dernières livraisons</h3><table><tbody><tr><td>il y a 3 min</td><td><code>a1f9c02</code></td><td><span class="tag ok">déployé</span></td></tr><tr><td>il y a 1 h</td><td><code>77be410</code></td><td><span class="tag sk">ignoré · rien sous '+esc(r)+'</span></td></tr></tbody></table>';
+    return h;
+  }
+
+  function renderPane(){
+    if(st.variant!=="app"&&st.view==="settings") st.view=0;
+    $("#pane").innerHTML=st.view==="settings"?settingsPane():sourcePane(apps[st.view]);
   }
   function renderSim(){
-    $("#files").innerHTML=files.map(function(f){return '<label><input type="checkbox" data-f="'+f+'" '+(sel.files[f]?"checked":"")+'> '+f+'</label>'}).join("");
-    var lines=['<span class="m">POST /api/hooks/github/… ← acme/shop  ref=refs/heads/'+sel.br+'</span>'];
+    $("#files").innerHTML=files.map(function(f){return '<label><input type="checkbox" data-f="'+f+'" '+(st.files[f]?"checked":"")+'> '+f+'</label>'}).join("");
+    var url=st.variant==="app"?"/api/hooks/github  (webhook unique de l'App)":"/api/hooks/github/<app>  (un webhook par app)";
+    var L=['<span class="m">POST '+url+' ← acme/shop  ref=refs/heads/'+st.br+'</span>'];
     apps.forEach(function(a){
-      var d=decide(a);
-      var root=norm(a.root)||"/";
-      lines.push((d.k==="ok"?'<span class="ok">▶ ':'<span class="m">· ')+pad(a.name,10)+'</span> racine '+pad(root,10)+' → '+(d.k==="ok"?'<span class="ok">'+d.t+'</span>  <span class="m">(fetch, post-receive, compose -p '+a.name+')</span>':'<span class="m">ignoré : '+d.t+'</span>'));
+      var d=decide(a),root=norm(a.root)||"/";
+      L.push(d===null
+        ?'<span class="ok">▶ '+pad(a.name,10)+'</span> racine '+pad(root,10)+' → <span class="ok">déploiement</span> <span class="m">('+(st.variant==="app"?"token 1 h, fetch https":"fetch ssh deploy key")+', post-receive, compose -p '+a.name+')</span>'
+        :'<span class="m">· '+pad(a.name,10)+' racine '+pad(root,10)+' → ignoré : '+esc(d)+'</span>');
     });
-    if(sel.files["shared/types.ts"]) lines.push('<span class="w">ℹ shared/ n\'est sous aucune racine : avec le filtre (Q4=a), personne ne redéploie pour ce fichier seul.</span>');
-    $("#out").innerHTML=lines.join("\n");
+    if(st.files["shared/types.ts"]) L.push('<span class="w">ℹ shared/ n\'est sous aucune racine : avec le filtre (Q4), ce fichier seul ne redéploie rien.</span>');
+    $("#out").innerHTML=L.join("\n");
   }
   function pad(s,n){s=String(s);while(s.length<n)s+=" ";return s}
-  function all(){renderSide();renderPane();renderSim()}
+  function all(){
+    $$("#variant button").forEach(function(b){b.classList.toggle("on",b.dataset.v===st.variant)});
+    renderSide();renderPane();renderSim();
+  }
 
   document.addEventListener("click",function(e){
-    var b=e.target.closest("#apps button");if(b){sel.app=+b.dataset.i;all();return}
-    var m=e.target.closest("#mode button");if(m){apps[sel.app].mode=m.dataset.m;all();}
+    var t;
+    if(t=e.target.closest("#variant button")){st.variant=t.dataset.v;all();return}
+    if(t=e.target.closest("#apps button")){st.view=+t.dataset.i;all();return}
+    if(t=e.target.closest("[data-settings]")){st.view="settings";all();return}
+    if(t=e.target.closest("#mode button")){apps[st.view].mode=t.dataset.m;all();return}
+    if(t=e.target.closest("[data-act]")){var a=t.dataset.act;st.step=a==="create"?1:a==="install"?2:0;all();}
   });
   document.addEventListener("input",function(e){
-    var t=e.target,a=apps[sel.app];
-    if(t.classList.contains("root")){a.root=t.value;$$(".root").forEach(function(i){if(i!==t)i.value=t.value});renderSide();renderSim();$("#deliv")&&renderPaneDeliv();}
+    var t=e.target;if(typeof st.view!=="number")return;var a=apps[st.view];
+    if(t.classList.contains("root")){a.root=t.value;renderSide();renderSim();}
+    else if(t.id==="repoTxt"){a.repo=t.value.replace(/^(https?:\/\/)?github\.com\//,"");renderSim();}
+    else if(t.id==="branchTxt"){a.branch=t.value;renderSim();}
   });
-  function renderPaneDeliv(){var a=apps[sel.app],r=norm(a.root)||"/";var c=$("#deliv").rows[1];if(c)c.cells[2].innerHTML='<span class="tag sk">ignoré · rien sous '+r+'</span>'}
   document.addEventListener("change",function(e){
-    var t=e.target,a=apps[sel.app];
-    if(t.id==="branch")a.branch=t.value;
+    var t=e.target,a=typeof st.view==="number"?apps[st.view]:null;
+    if(t.name==="br")st.br=t.value;
+    else if(t.dataset&&t.dataset.f)st.files[t.dataset.f]=t.checked;
+    else if(!a)return;
+    else if(t.id==="repo")a.repo=t.value;
+    else if(t.id==="branch")a.branch=t.value;
     else if(t.id==="auto")a.auto=t.checked;
     else if(t.id==="filter")a.filter=t.checked;
-    else if(t.name==="br")sel.br=t.value;
-    else if(t.dataset.f)sel.files[t.dataset.f]=t.checked;
     else return;
     renderSim();
   });
