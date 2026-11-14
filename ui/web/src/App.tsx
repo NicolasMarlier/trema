@@ -1,3 +1,4 @@
+import { jobTitle } from "./resync";
 import { useCallback, useEffect, useState } from "react";
 import { api, appPath, ApiError, type AppsResponse, type AppInfo, type System } from "./api";
 import { buildHash, formatBytes, parseHash, percent, TABS, type Route, type Tab } from "./format";
@@ -60,9 +61,11 @@ export function App() {
   const sys = useResource<System>("system", () => api("system"), 10_000);
   const me = useResource<{ public: boolean }>("me", () => api("me"));
   const { jobs, track, restore, dismiss } = useJobs((j) => {
-    toast(j.state === "ok" ? "ok" : "error", `${j.app} : ${j.action} ${j.state === "ok" ? "terminé" : "échoué"}`);
+    toast(j.state === "ok" ? "ok" : "error", `${j.app} : ${jobTitle(j.action).toLowerCase()} ${j.state === "ok" ? "terminé" : "échoué"}`);
     apps.reload();
+    setDeploysVersion((v) => v + 1);
   });
+  const [deploysVersion, setDeploysVersion] = useState(0);
   const [confirm, setConfirm] = useState<null | "stop" | "redeploy">(null);
   const [pending, setPending] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -128,7 +131,7 @@ export function App() {
             {route.tab === "logs" && <Logs key={app.name} app={app.name} />}
             {route.tab === "env" && <Env key={app.name} app={app.name} busy={busy} onRedeploy={track} />}
             {route.tab === "source" && <SourceTab key={app.name} app={app.name} busy={busy} onDeploy={track} />}
-            {route.tab === "deploys" && <Deploys key={app.name} app={app.name} />}
+            {route.tab === "deploys" && <Deploys key={app.name} app={app.name} version={deploysVersion} />}
             </>}
           </>
         )}

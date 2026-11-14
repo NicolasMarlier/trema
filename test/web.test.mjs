@@ -51,3 +51,17 @@ test("diffEnv + toPatch", () => {
   assert.deepEqual(d.toPatch(c), { set: { A: "1", N: "2" }, unset: ["B", "C"] });
   assert.deepEqual(d.diffEnv({ original: ["A"], edited: {}, removed: [] }), []);
 });
+
+import * as rs from "../ui/web/src/resync.ts";
+test("resyncStep", () => {
+  assert.deepEqual(rs.resyncStep(null), { kind: "retry" });
+  assert.equal(rs.resyncStep({ id: "1", state: "running" }).kind, "reconnect");
+  assert.equal(rs.resyncStep({ id: "1", state: "ok" }).kind, "done");
+  assert.equal(rs.resyncStep({ id: "1", state: "failed" }).kind, "done");
+});
+test("resyncDelay / jobTitle", () => {
+  assert.equal(rs.resyncDelay(0), 1000);
+  assert.equal(rs.resyncDelay(100), 5000);
+  assert.equal(rs.jobTitle("deploy"), "Déploiement");
+  assert.equal(rs.jobTitle("x"), "x");
+});
