@@ -124,11 +124,11 @@ export function App() {
             <div className="tabs" role="tablist">
               {TABS.map((t) => <a key={t} role="tab" aria-selected={t === route.tab} className={t === route.tab ? "active" : ""} href={buildHash({ app: app.name, tab: t })}>{TAB_LABEL[t]}</a>)}
             </div>
-            {route.tab === "overview" && <Overview app={app.name} dockerOk={apps.data?.dockerOk ?? true} />}
-            {route.tab === "logs" && <Logs app={app.name} />}
-            {route.tab === "env" && <Env app={app.name} busy={busy} onRedeploy={track} />}
-            {route.tab === "source" && <SourceTab app={app.name} busy={busy} onDeploy={track} />}
-            {route.tab === "deploys" && <Deploys app={app.name} />}
+            {route.tab === "overview" && <Overview key={app.name} app={app.name} dockerOk={apps.data?.dockerOk ?? true} />}
+            {route.tab === "logs" && <Logs key={app.name} app={app.name} />}
+            {route.tab === "env" && <Env key={app.name} app={app.name} busy={busy} onRedeploy={track} />}
+            {route.tab === "source" && <SourceTab key={app.name} app={app.name} busy={busy} onDeploy={track} />}
+            {route.tab === "deploys" && <Deploys key={app.name} app={app.name} />}
             </>}
           </>
         )}

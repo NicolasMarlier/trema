@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>T-14 — Onglet Source : la config d'une app « fuit » sur l'autre</title>
+<style>
+  :root{color-scheme:light}
+  *{box-sizing:border-box}
+  body{margin:0;font:15px/1.55 Inter,-apple-system,system-ui,sans-serif;background:#f4f1ea;color:#141517}
+  main{max-width:1000px;margin:0 auto;padding:32px 22px 80px}
+  .kicker{letter-spacing:.25em;font-size:11px;text-transform:uppercase;color:#565b58}
+  h1{font-size:28px;margin:4px 0 6px}
+  h2{margin:34px 0 10px;font-size:19px;border-bottom:1px solid #d3cec1;padding-bottom:5px}
+  .mut{color:#565b58}
+  code{font-family:ui-monospace,Menlo,monospace;font-size:13px;background:#ebe7dd;padding:1px 5px;border-radius:4px}
+  .note{border-left:3px solid #f15a24;background:#fbf9f4;padding:10px 14px;border-radius:0 8px 8px 0;margin:14px 0}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:820px){.cols{grid-template-columns:1fr}}
+  .card{background:#fbf9f4;border:1px solid #d3cec1;border-radius:10px;padding:12px 14px}
+  .card h4{margin:0 0 6px;font-size:14px}
+  .card.pick{border-color:#f15a24}
+  .proto{border:1px solid #d3cec1;border-radius:12px;overflow:hidden;background:#fff;display:grid;grid-template-columns:180px 1fr}
+  @media(max-width:820px){.proto{grid-template-columns:1fr}}
+  .side{background:#ebe7dd;border-right:1px solid #d3cec1;padding:12px 10px;font-size:13px}
+  .side .brand{font-weight:700;letter-spacing:.12em;font-size:12px;margin-bottom:10px}
+  .side button{display:block;width:100%;text-align:left;font:inherit;border:0;background:none;padding:6px 8px;border-radius:6px;cursor:pointer;color:#141517}
+  .side button.on{background:#141517;color:#f4f1ea}
+  .side small{display:block;font-size:11px;opacity:.7}
+  .pane{padding:14px 18px;min-height:300px}
+  .tabs{display:flex;gap:16px;border-bottom:1px solid #d3cec1;margin-bottom:12px;font-size:13.5px}
+  .tabs span{padding:6px 0;color:#565b58}
+  .tabs span.on{color:#141517;border-bottom:2px solid #f15a24;font-weight:600}
+  .seg{display:inline-flex;border:1px solid #d3cec1;border-radius:8px;overflow:hidden;margin:0 0 12px}
+  .seg button{font:inherit;font-size:13px;border:0;background:#fbf9f4;padding:5px 12px;cursor:pointer;color:#141517}
+  .seg button.on{background:#141517;color:#f4f1ea}
+  .form{display:grid;grid-template-columns:130px 1fr;gap:8px 12px;align-items:center;font-size:13.5px}
+  .form .v{font:13px ui-monospace,Menlo,monospace;padding:5px 8px;border:1px solid #d3cec1;border-radius:6px;background:#fff;min-height:30px}
+  .form .v.bad{border-color:#f15a24;background:#fff3ee;color:#b4321a}
+  .form .v.empty{color:#9a9d99}
+  .truth{margin-top:12px;font-size:12.5px}
+  .tag{font-size:11px;padding:1px 8px;border-radius:99px;border:1px solid #d3cec1;background:#fbf9f4;white-space:nowrap}
+  .tag.ok{color:#2f6b47;border-color:#9cc7ab}.tag.ko{color:#b4321a;border-color:#f15a24}
+  svg text{font-family:Inter,-apple-system,system-ui,sans-serif}
+  section[data-usine-q]{margin:14px 0}
+</style>
+</head>
+<body>
+<main>
+  <div class="kicker">Usine · trema · T-14 · Spec</div>
+  <h1>Onglet Source : la config d'une app s'affiche sur une autre</h1>
+  <p class="mut">Bug front uniquement. Le serveur renvoie la bonne config ; c'est le formulaire qui garde l'état de l'app précédente.</p>
+
+  <h2>Cause</h2>
+  <p>Dans <code>App.tsx</code>, <code>&lt;SourceTab app={app.name} /&gt;</code> n'est <b>pas remonté</b> quand on change d'app : React réutilise le même composant, donc l'état local <code>form</code> (dépôt, branche, dossier racine, cases) et <code>branches</code> survivent au changement d'app.</p>
+  <p>Le seul « recalage » est <code>useEffect(() =&gt; { if (src.data) setForm(src.data) })</code>. Il ne s'applique pas quand :</p>
+  <ul>
+    <li>la nouvelle app <b>n'a pas de source</b> (<code>src.data === null</code>) → on garde à l'écran la config de l'app précédente, et un clic sur « Enregistrer » <b>l'écrirait sur la mauvaise app</b> ;</li>
+    <li>la source de la nouvelle app <b>est en cours de chargement</b> (pas en cache) → l'ancienne config s'affiche le temps de la requête.</li>
+  </ul>
+  <p class="mut">L'onglet Env a déjà un reset explicite sur <code>[app]</code>, il n'est pas concerné. Les onglets Vue d'ensemble / Logs / Déploiements n'ont pas d'état de formulaire.</p>
+
+  <h2>Prototype (simulation)</h2>
+  <p class="mut">« api » a une source configurée, « blog » n'en a pas. Cliquez sur les apps dans la sidebar en mode Avant puis Après.</p>
+  <div class="seg" id="mode"><button data-m="before" class="on">Avant (bug)</button><button data-m="after">Après (corrigé)</button></div>
+  <div class="proto">
+    <div class="side">
+      <div class="brand">TREMA</div>
+      <button data-app="api" class="on">api<small>source : org/api@main</small></button>
+      <button data-app="blog">blog<small>pas de source</small></button>
+      <button data-app="shop">shop<small>source : org/shop@prod · /web</small></button>
+    </div>
+    <div class="pane">
+      <div class="tabs"><span>Vue d'ensemble</span><span>Logs</span><span>Env</span><span class="on">Source</span><span>Déploiements</span></div>
+      <b id="title">Source GitHub — api</b>
+      <div class="form" style="margin-top:10px">
+        <span>Dépôt</span><div class="v" id="f-repo"></div>
+        <span>Branche</span><div class="v" id="f-branch"></div>
+        <span>Dossier racine</span><div class="v" id="f-root"></div>
+        <span>Auto-deploy</span><div class="v" id="f-auto"></div>
+      </div>
+      <div class="truth" id="truth"></div>
+    </div>
+  </div>
+
+  <h2>Correction proposée</h2>
+  <div class="cols">
+    <div class="card pick">
+      <h4>A. Remonter l'onglet à chaque app (recommandé)</h4>
+      Ajouter <code>key={app.name}</code> sur les composants d'onglet dans <code>App.tsx</code>. Tout l'état local repart de zéro : formulaire vide, puis rempli par la source de l'app (depuis le cache, ou au retour de la requête). Une ligne, couvre aussi tout futur onglet avec état.
+    </div>
+    <div class="card">
+      <h4>B. Reset ciblé dans <code>SourceTab</code></h4>
+      Réinitialiser <code>form</code> / <code>branches</code> sur changement de <code>app</code>, et quand <code>src.data === null</code>. Plus local, mais à refaire pour chaque nouvel onglet.
+    </div>
+  </div>
+  <svg viewBox="0 0 900 120" width="100%" role="img" aria-label="Flux après correction" style="margin-top:14px">
+    <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#141517"/></marker></defs>
+    <g font-size="13">
+      <rect x="10" y="35" width="150" height="50" rx="8" fill="#fbf9f4" stroke="#d3cec1"/><text x="85" y="65" text-anchor="middle">Clic app « blog »</text>
+      <rect x="200" y="35" width="170" height="50" rx="8" fill="#fbf9f4" stroke="#f15a24"/><text x="285" y="58" text-anchor="middle">key change →</text><text x="285" y="75" text-anchor="middle">SourceTab remonté</text>
+      <rect x="410" y="35" width="160" height="50" rx="8" fill="#fbf9f4" stroke="#d3cec1"/><text x="490" y="58" text-anchor="middle">form = vide</text><text x="490" y="75" text-anchor="middle" fill="#565b58">(squelette si chargement)</text>
+      <rect x="610" y="35" width="130" height="50" rx="8" fill="#fbf9f4" stroke="#d3cec1"/><text x="675" y="65" text-anchor="middle">GET source</text>
+      <rect x="770" y="10" width="120" height="40" rx="8" fill="#fbf9f4" stroke="#9cc7ab"/><text x="830" y="35" text-anchor="middle">source → form</text>
+      <rect x="770" y="70" width="120" height="40" rx="8" fill="#fbf9f4" stroke="#d3cec1"/><text x="830" y="95" text-anchor="middle">null → reste vide</text>
+    </g>
+    <g stroke="#141517" stroke-width="1.5" marker-end="url(#ar)" fill="none">
+      <path d="M160 60H198"/><path d="M370 60H408"/><path d="M570 60H608"/><path d="M740 55L768 32"/><path d="M740 65L768 88"/>
+    </g>
+  </svg>
+  <div class="note">Bonus proposé : tant que la source de l'app n'est pas chargée, afficher un squelette plutôt qu'un formulaire vide, et désactiver « Enregistrer » — pour éviter tout écrasement accidentel.</div>
+
+  <h2>Critères d'acceptation</h2>
+  <ul>
+    <li>Passer de « api » (source configurée) à « blog » (sans source) affiche un formulaire vide.</li>
+    <li>Passer de « api » à « shop » n'affiche jamais, même brièvement, les valeurs de « api ».</li>
+    <li>La liste des branches correspond au dépôt de l'app affichée.</li>
+    <li>« Enregistrer » ne peut pas écrire la config d'une autre app.</li>
+  </ul>
+
+  <h2>Questions ouvertes</h2>
+  <section data-usine-q="Q1" data-kind="single" data-label="Quelle approche de correction ?" data-reco="a">
+    <div data-option="a">A. key={app.name} sur les onglets (remontage complet)</div>
+    <div data-option="b">B. Reset ciblé dans SourceTab</div>
+  </section>
+  <section data-usine-q="Q2" data-kind="single" data-label="Afficher un squelette + désactiver Enregistrer pendant le chargement de la source ?" data-reco="yes">
+    <div data-option="yes">Oui</div>
+    <div data-option="no">Non, formulaire vide suffit</div>
+  </section>
+  <section data-usine-q="Q3" data-kind="single" data-label="Tests : le front n'a pas de suite de tests. Que faire ?" data-reco="none">
+    <div data-option="none">Pas de test auto (fix UI trivial), vérification manuelle</div>
+    <div data-option="setup">Mettre en place Vitest + Testing Library et ajouter un test de régression</div>
+  </section>
+</main>
+<script>
+(function(){
+  var SRC={api:{repo:"org/api",branch:"main",root:"",auto:true},blog:null,shop:{repo:"org/shop",branch:"prod",root:"web",auto:false}};
+  var mode="before",app="api",form={repo:"org/api",branch:"main",root:"",auto:true},shownFrom="api";
+  function $(id){return document.getElementById(id)}
+  function render(){
+    var bad = mode==="before" && shownFrom!==app;
+    var empty = !form.repo;
+    function set(id,v){var e=$(id);e.textContent=v||"(vide)";e.className="v"+(bad?" bad":"")+(empty?" empty":"")}
+    $("title").textContent="Source GitHub — "+app;
+    set("f-repo",form.repo);set("f-branch",form.branch);set("f-root",form.root||(form.repo?"(racine)":""));
+    set("f-auto",form.repo?(form.auto?"oui":"non"):"");
+    var real=SRC[app];
+    $("truth").innerHTML="Config réelle côté serveur : "+(real?"<code>"+real.repo+"@"+real.branch+(real.root?" · /"+real.root:"")+"</code>":"<i>aucune</i>")+" "+(bad?'<span class="tag ko">affiche la config de « '+shownFrom+' »</span>':'<span class="tag ok">cohérent</span>');
+  }
+  function select(a){
+    app=a;
+    var s=SRC[a];
+    if(mode==="after"){form=s?Object.assign({},s):{repo:"",branch:"",root:"",auto:true};shownFrom=a;}
+    else if(s){form=Object.assign({},s);shownFrom=a;}
+    render();
+  }
+  document.querySelectorAll(".side button").forEach(function(b){b.onclick=function(){
+    document.querySelectorAll(".side button").forEach(function(x){x.classList.toggle("on",x===b)});select(b.dataset.app);
+  }});
+  document.querySelectorAll("#mode button").forEach(function(b){b.onclick=function(){
+    mode=b.dataset.m;document.querySelectorAll("#mode button").forEach(function(x){x.classList.toggle("on",x===b)});select(app);
+  }});
+  render();
+})();
+</script>
+</body>
+</html>
