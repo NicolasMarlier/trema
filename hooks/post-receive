@@ -32,12 +32,31 @@ git --work-tree="$WORK_TREE" --git-dir="$REPO_DIR" checkout -f
 
 
 
-cd "$WORK_TREE"
+# Root directory (monorepo): detection and docker compose run from that sub-directory.
+ROOT_DIR=$(git --git-dir="$REPO_DIR" config --get trema.rootdir 2>/dev/null | sed 's#^/*##; s#/*$##')
+case "$ROOT_DIR" in .|..|../*|*/..|*/../*) ROOT_DIR="" ;; esac
+if [ -n "$ROOT_DIR" ]; then
+    if ! git --git-dir="$REPO_DIR" cat-file -e "HEAD:$ROOT_DIR" 2>/dev/null; then
+        echo "❌ Root directory '$ROOT_DIR' not found in this commit, deployment aborted."
+        exit 1
+    fi
+    echo "Root directory: $ROOT_DIR"
+    # Two apps built from the same repo must not share containers.
+    export COMPOSE_PROJECT_NAME="$APP_NAME"
+    COMPOSE_DIR="$WORK_TREE/$ROOT_DIR"
+    GIT_PREFIX_PATH="$ROOT_DIR/"
+else
+    COMPOSE_DIR="$WORK_TREE"
+    GIT_PREFIX_PATH=""
+fi
+DEPLOY_SOURCE="${TREMA_SOURCE:-push}"
+
+cd "$COMPOSE_DIR"
 
 
 # An app shipping its own docker-compose.yml (with a `web` service listening on 3000)
 # is deployed as-is. Otherwise, fall back to the Rails + Postgres template.
-if git --git-dir="$REPO_DIR" cat-file -e HEAD:docker-compose.yml 2>/dev/null; then
+if git --git-dir="$REPO_DIR" cat-file -e "HEAD:${GIT_PREFIX_PATH}docker-compose.yml" 2>/dev/null; then
     CUSTOM_COMPOSE=1
     echo "Detected app-provided docker-compose.yml"
 else
@@ -66,13 +85,13 @@ fi
 echo "🐳 Building and restarting containers..."
 
 if [ "$CUSTOM_COMPOSE" = "0" ]; then
-    cp $DOCKER_FILES_DIR/RoR_3_4_8_Puma.Dockerfile $WORK_TREE/Dockerfile
-    cp $DOCKER_FILES_DIR/ruby_on_rails_postgres.yml $WORK_TREE/docker-compose.yml
+    cp $DOCKER_FILES_DIR/RoR_3_4_8_Puma.Dockerfile "$COMPOSE_DIR/Dockerfile"
+    cp $DOCKER_FILES_DIR/ruby_on_rails_postgres.yml "$COMPOSE_DIR/docker-compose.yml"
 fi
 
-# Append to deploys.log (read by the Trema UI): date<TAB>commit<TAB>duration<TAB>result<TAB>commit message
+# Append to deploys.log (read by the Trema UI): date<TAB>commit<TAB>duration<TAB>result<TAB>commit message<TAB>source (always at the app root, not the root directory)
 log_deploy() {
-    printf '%s\t%s\t%s\t%s\t%s\n' "$(date -u +%FT%TZ)" "$(git --git-dir="$REPO_DIR" rev-parse --short HEAD)" "$(( $(date +%s) - DEPLOY_START ))" "$1" "$(git --git-dir="$REPO_DIR" log -1 --format=%s HEAD | tr '\t\r\n' '   ' | cut -c1-200)" >> "$WORK_TREE/deploys.log"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$(date -u +%FT%TZ)" "$(git --git-dir="$REPO_DIR" rev-parse --short HEAD)" "$(( $(date +%s) - DEPLOY_START ))" "$1" "$(git --git-dir="$REPO_DIR" log -1 --format=%s HEAD | tr '\t\r\n' '   ' | cut -c1-200)" "$DEPLOY_SOURCE" >> "$WORK_TREE/deploys.log"
 }
 
 if [ "$CUSTOM_COMPOSE" = "0" ]; then

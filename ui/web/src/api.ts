@@ -3,7 +3,7 @@ export type AppInfo = { name: string; status: Status; busy: boolean; url: string
 export type AppsResponse = { dockerOk: boolean; apps: AppInfo[] };
 export type System = { cpu: number | null; mem: { total: number; used: number } | null; disk: { total: number; used: number } | null; hostname: string; dockerOk: boolean; at: number };
 export type Container = { name: string; state: string; cpu: string | null; mem: string | null };
-export type Deploy = { date: string; commit: string; duration: number; result: "ok" | "failed"; message: string | null };
+export type Deploy = { date: string; commit: string; duration: number; result: "ok" | "failed"; message: string | null; source?: "push" | "github" | "manual" | null };
 export type EnvKey = { key: string; sensitive: boolean };
 export type Job = { id: string; app: string; action: string; state: "running" | "ok" | "failed"; startedAt: number; endedAt: number | null; output?: string };
 
@@ -24,3 +24,7 @@ export async function api<T>(path: string, init?: { method?: string; body?: unkn
 }
 
 export const appPath = (name: string, sub = "") => `apps/${encodeURIComponent(name)}${sub ? `/${sub}` : ""}`;
+
+export type Source = { repo: string; branch: string; rootDir: string; autoDeploy: boolean; alwaysDeploy: boolean; installationId: number | null };
+export type GhRepo = { repo: string; private: boolean; defaultBranch: string; installationId: number; account?: string };
+export type GhStatus = { configured: boolean; slug: string | null; htmlUrl: string | null; webhookUrl: string; deliveries: { date: string; repo: string; ref: string; commit: string; results: { app: string; action: string; reason?: string }[] }[] };

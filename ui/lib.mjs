@@ -85,10 +85,11 @@ export function maskEntries(entries) {
   return entries.map(({ key }) => ({ key, masked: true }));
 }
 
-/** deploys.log line format: ISO_DATE<TAB>COMMIT<TAB>DURATION_S<TAB>ok|failed[<TAB>MESSAGE] (message optional, legacy lines have 4 columns) */
-export function formatDeployLine({ date, commit, duration, result, message }) {
+/** deploys.log line format: ISO_DATE<TAB>COMMIT<TAB>DURATION_S<TAB>ok|failed[<TAB>MESSAGE] (message optional, legacy lines have 4 columns), then optional SOURCE (push|github|manual) */
+export function formatDeployLine({ date, commit, duration, result, message, source }) {
   const cols = [date, commit, duration, result];
-  if (message) cols.push(String(message).replace(/[\t\r\n]+/g, " ").slice(0, 200));
+  if (message || source) cols.push(String(message ?? "").replace(/[\t\r\n]+/g, " ").slice(0, 200));
+  if (source) cols.push(source);
   return cols.join("\t");
 }
 
@@ -97,8 +98,8 @@ export function parseDeploys(text) {
     .split("\n")
     .filter(Boolean)
     .map((l) => {
-      const [date, commit, duration, result, ...rest] = l.split("\t");
-      return { date, commit, duration: Number(duration), result, message: rest.join(" ") || null };
+      const [date, commit, duration, result, message, source] = l.split("\t");
+      return { date, commit, duration: Number(duration), result, message: message || null, source: source || null };
     })
     .filter((d) => d.date && d.commit && (d.result === "ok" || d.result === "failed"))
     .reverse();

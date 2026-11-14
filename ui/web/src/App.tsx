@@ -5,9 +5,10 @@ import { useResource } from "./useResource";
 import { Confirm, ErrorBox, Gauge, Refreshing, Skeleton, StatusDot, StatusPill } from "./ui";
 import { JobBanner, useJobs } from "./jobs";
 import { Deploys, Env, Logs, Overview, Pending } from "./tabs";
+import { SourceTab } from "./source";
 import { useToast } from "./toast";
 
-const TAB_LABEL: Record<Tab, string> = { overview: "Vue d'ensemble", logs: "Logs", env: "Env", deploys: "Déploiements" };
+const TAB_LABEL: Record<Tab, string> = { overview: "Vue d'ensemble", logs: "Logs", env: "Env", source: "Source", deploys: "Déploiements" };
 
 function useRoute(): [Route, (r: Route) => void] {
   const [route, setRoute] = useState(() => parseHash(location.hash));
@@ -126,6 +127,7 @@ export function App() {
             {route.tab === "overview" && <Overview app={app.name} dockerOk={apps.data?.dockerOk ?? true} />}
             {route.tab === "logs" && <Logs app={app.name} />}
             {route.tab === "env" && <Env app={app.name} busy={busy} onRedeploy={track} />}
+            {route.tab === "source" && <SourceTab app={app.name} busy={busy} onDeploy={track} />}
             {route.tab === "deploys" && <Deploys app={app.name} />}
             </>}
           </>
