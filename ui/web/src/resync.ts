@@ -18,5 +18,5 @@ export function resyncDelay(attempt: number): number {
   return Math.min(5000, 1000 + attempt * 500);
 }
 
-const TITLE: Record<string, string> = { restart: "Redémarrage", stop: "Arrêt", start: "Démarrage", redeploy: "Redéploiement", create: "Création de l'app", deploy: "Déploiement" };
+const TITLE: Record<string, string> = { restart: "Redémarrage", stop: "Arrêt", start: "Démarrage", redeploy: "Redéploiement", create: "Création de l'app", deploy: "Déploiement", "db-dump": "Dump de la base", "db-restore": "Restauration de la base" };
 export function jobTitle(action: string): string { return TITLE[action] ?? action; }

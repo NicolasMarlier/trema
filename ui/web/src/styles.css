@@ -58,3 +58,8 @@ table{width:100%;border-collapse:collapse}th{text-align:left;color:var(--mut);fo
 .resync{font-size:12px;margin-top:6px}
 
 .sec-ok{color:var(--ok,#2a9d4b)}.sec-warn{color:var(--warn,#c77d00)}.vm .mut{font-size:11px;margin:4px 0 0}
+
+/* T-18: database tab */
+.drop{border:2px dashed var(--line);border-radius:10px;padding:16px;text-align:center;color:var(--mut);cursor:pointer}.drop.has{border-style:solid;border-color:var(--ok);color:var(--fg)}
+.modes label{display:block;border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:8px 0;cursor:pointer}.modes label.on{border-color:var(--accent)}.modes small{display:block;margin-left:22px}
+.restore .warn{color:var(--warn)}

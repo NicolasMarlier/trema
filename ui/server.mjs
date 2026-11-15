@@ -11,6 +11,10 @@ import { securityStatus, isValidAppName, parseEnv, applyEnvPatch, formatDeployLi
 import { provisionApp } from "./provision.mjs";
 import { verifySignature, appJwt, appManifest, createStateStore, validateSource, selectApps, gitAuthHeader } from "./github.mjs";
 import crypto from "node:crypto";
+import zlib from "node:zlib";
+import { pipeline } from "node:stream/promises";
+import { MAX_UPLOAD, dumpStamp, dumpFileName, isValidDumpFile, parseDumpFile, uploadExt, detectFormat, planSteps, STEP_LABEL, MODES,
+  dumpScript, dropSchemaScript, restoreScript } from "./dbdump.mjs";
 import { verifyPassword, verifyTotp, makeSession, checkSession, parseCookies, createThrottle, formatAudit } from "./auth.mjs";
 
 const HOME = process.env.TREMA_HOME || process.env.HOME;
@@ -70,6 +74,7 @@ function appUrl(name) {
   return parseNginxUrl(read(path.join(NGINX_SITES, sub)));
 }
 const REPOS = path.join(HOME, "repos");
+const DUMPS = process.env.TREMA_DUMPS || "/db_dumps";
 const HOOKS_DIR = process.env.TREMA_HOOKS || path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "hooks");
 const dirs = (d) => (fs.existsSync(d) ? fs.readdirSync(d).filter(isValidAppName) : []);
 const allApps = () => mergeAppNames(dirs(REPOS), dirs(APPS));
@@ -202,7 +207,7 @@ function listApps() {
     const cs = containersOf(name);
     const job = lastJob(name);
     const status = !deployed ? "pending" : cache.dockerOk === false ? "unknown" : appStatus(cs);
-    return { name, status, busy: job?.state === "running", url: appUrl(name) };
+    return { name, status, busy: job?.state === "running", url: appUrl(name), hasDb: cs.some((c) => c.service === "db") };
   });
 }
 
@@ -322,6 +327,142 @@ async function createApp(req, res) {
   return r.error ? json(res, 409, { error: r.error, job: jobView(r.job, false) }) : json(res, 202, { job: jobView(r.job, false) });
 }
 
+// ---- Database dumps (T-18): pg_dump / restore run inside the app's `db` compose service; files live in DUMPS. ----
+const dbRun = (push, name, script, { stdin = null, stdout = null } = {}) => new Promise((ok) => {
+  const p = spawn("docker", ["compose", "exec", "-T", "db", "sh", "-c", script], { cwd: composeDir(name), env: composeEnv(name) });
+  p.stdout.on("data", (c) => { if (!stdout) push(c); });
+  p.stderr.on("data", push);
+  p.on("error", (e) => { push(`error: ${e.message}\n`); ok(false); });
+  let piped = Promise.resolve();
+  if (stdout) piped = pipeline(p.stdout, stdout).catch((e) => { push(`error: ${e.message}\n`); p.kill(); });
+  let inErr = null;
+  if (stdin) pipeline(stdin, p.stdin).catch((e) => { inErr = e; push(`error: flux d'entrée interrompu (${e.message})\n`); p.kill(); }); else p.stdin.end();
+  p.on("close", async (code) => { await piped; ok(code === 0 && !inErr); });
+});
+const compose = (push, name, args) => new Promise((ok) => {
+  const p = spawn("docker", ["compose", ...args], { cwd: composeDir(name), env: composeEnv(name) });
+  p.stdout.on("data", push); p.stderr.on("data", push);
+  p.on("error", (e) => { push(`error: ${e.message}\n`); ok(false); });
+  p.on("close", (code) => ok(code === 0));
+});
+const hasDb = (name) => containersOf(name).some((c) => c.service === "db");
+
+function listDumps(name) {
+  let files = [];
+  try { files = fs.readdirSync(DUMPS); } catch {}
+  return files.map((f) => ({ d: parseDumpFile(name, f), f })).filter((x) => x.d).map(({ d, f }) => {
+    const st = fs.statSync(path.join(DUMPS, f));
+    return { file: f, size: st.size, date: st.mtime.toISOString().replace(/\.\d+Z$/, "Z"), origin: d.origin };
+  }).sort((a, b) => b.file.localeCompare(a.file));
+}
+
+function readHead(file, n = 4096) {
+  const fd = fs.openSync(file, "r");
+  try { const b = Buffer.alloc(n); return b.subarray(0, fs.readSync(fd, b, 0, n, 0)); } finally { fs.closeSync(fd); }
+}
+
+// Unique, never-overwriting name: bump the stamp by one second until the file (and its .part) are free.
+const reserved = new Set();
+function freshName(app, kind = "manual", ext = "dump") {
+  for (let t = Date.now(); ; t += 1000) {
+    const file = dumpFileName(app, dumpStamp(new Date(t)), kind, ext), dest = path.join(DUMPS, file);
+    if (reserved.has(file) || fs.existsSync(dest) || fs.existsSync(`${dest}.part`)) continue;
+    reserved.add(file); setTimeout(() => reserved.delete(file), 60000).unref();
+    return file;
+  }
+}
+
+async function makeDump(push, name, file) {
+  const dest = path.join(DUMPS, file), tmp = `${dest}.part`;
+  try { fs.mkdirSync(DUMPS, { recursive: true }); } catch {}
+  push(`pg_dump -Fc → ${dest}\n`);
+  const ok = await dbRun(push, name, dumpScript(), { stdout: fs.createWriteStream(tmp, { mode: 0o644 }) });
+  if (!ok) { fs.rmSync(tmp, { force: true }); return false; }
+  if (fs.existsSync(dest)) { fs.rmSync(tmp, { force: true }); push(`error: ${file} existe déjà, refus de l'écraser\n`); return false; }
+  fs.renameSync(tmp, dest);
+  push(`${(fs.statSync(dest).size / 1e6).toFixed(1)} Mo écrits\n`);
+  return true;
+}
+
+async function restoreDump(push, name, file, mode) {
+  const src = path.join(DUMPS, file);
+  const head = detectFormat(readHead(src));
+  if (!head) { push("error: format de dump non reconnu\n"); return false; }
+  const format = head === "custom" ? "custom" : "sql";
+  const input = () => head === "gzip" ? fs.createReadStream(src).pipe(zlib.createGunzip()) : fs.createReadStream(src);
+  const safety = freshName(name, "pre-restore");
+  push(`Format détecté : ${head} · mode : ${mode === "full" ? "remplacer tout" : "données seulement"}\n`);
+  let webStopped = false, ok = true, safetyDone = false;
+  const steps = planSteps(mode);
+  for (const step of steps) {
+    push(`\n${STEP_LABEL[step]}\n`);
+    if (step === "safety-dump") { ok = safetyDone = await makeDump(push, name, safety); }
+    else if (step === "stop-web") { ok = await compose(push, name, ["stop", "web"]); webStopped = true; }
+    else if (step === "drop-schema") ok = await dbRun(push, name, dropSchemaScript());
+    else if (step === "restore" || step === "load-data") ok = await dbRun(push, name, restoreScript(mode, format), { stdin: input() });
+    else if (step === "migrate") ok = await compose(push, name, ["run", "--rm", "web", "bin/rails", "db:prepare"]);
+    else if (step === "start-web") { ok = await compose(push, name, ["start", "web"]); }
+    if (!ok) break;
+  }
+  if (!ok) {
+    // The web must come back whatever happened.
+    if (webStopped) await compose(push, name, ["start", "web"]);
+    push(`\n✕ Échec. ${safetyDone ? `Dump de sécurité à restaurer : ${safety}` : "Aucun dump de sécurité n'a été créé : la base n'a pas été modifiée."}\n`);
+  }
+  return ok;
+}
+
+async function receiveUpload(name, req, res, url) {
+  const ext = uploadExt(url.searchParams.get("name"));
+  if (!ext) return json(res, 400, { error: "Extension non supportée (.dump, .sql, .sql.gz)." });
+  const len = Number(req.headers["content-length"] ?? 0);
+  if (len > MAX_UPLOAD) return json(res, 413, { error: `Fichier trop gros (max ${MAX_UPLOAD / 1048576} Mo).` });
+  fs.mkdirSync(DUMPS, { recursive: true });
+  const file = freshName(name, "upload", ext);
+  const dest = path.join(DUMPS, file), tmp = `${dest}.part`;
+  let n = 0;
+  const limit = async function* (src) { for await (const c of src) { n += c.length; if (n > MAX_UPLOAD) throw new Error("too large"); yield c; } };
+  try { await pipeline(req, limit, fs.createWriteStream(tmp, { mode: 0o644 })); }
+  catch (e) { fs.rmSync(tmp, { force: true }); return json(res, e.message === "too large" ? 413 : 400, { error: e.message === "too large" ? `Fichier trop gros (max ${MAX_UPLOAD / 1048576} Mo).` : e.message }); }
+  const format = n ? detectFormat(readHead(tmp)) : null;
+  if (!format || (ext === "dump" && format !== "custom") || (ext === "sql.gz" && format !== "gzip") || (ext === "sql" && format !== "sql")) {
+    fs.rmSync(tmp, { force: true });
+    return json(res, 400, { error: "Le contenu ne correspond pas à l'extension (format non reconnu)." });
+  }
+  if (fs.existsSync(dest)) { fs.rmSync(tmp, { force: true }); return json(res, 409, { error: "Un dump portant ce nom existe déjà, réessayez." }); }
+  fs.renameSync(tmp, dest);
+  return json(res, 201, { file, size: n, format });
+}
+
+async function handleDb(name, parts, req, res, url, ip) {
+  if (!hasDb(name)) return json(res, 409, { error: "Cette app n'a pas de conteneur db." });
+  const what = parts[4], f = parts[5];
+  if (what === "dumps" && !f && req.method === "GET") return json(res, 200, listDumps(name));
+  if (what === "dumps" && !f && req.method === "POST") {
+    const file = freshName(name);
+    const r = startJob(name, "db-dump", [], { task: (push) => makeDump(push, name, file) });
+    return r.error ? json(res, 409, { error: r.error, job: jobView(r.job, false) }) : json(res, 202, { job: jobView(r.job, false), file });
+  }
+  if (what === "dumps" && f && req.method === "GET") {
+    if (!parseDumpFile(name, f) || !fs.existsSync(path.join(DUMPS, f))) return json(res, 404, { error: "not found" });
+    audit(ip, "db_download", `${name} ${f}`);
+    res.writeHead(200, { "content-type": "application/octet-stream", "content-length": fs.statSync(path.join(DUMPS, f)).size, "content-disposition": `attachment; filename="${f}"` });
+    return fs.createReadStream(path.join(DUMPS, f)).pipe(res);
+  }
+  if (what === "upload" && req.method === "POST") return receiveUpload(name, req, res, url);
+  if (what === "restore" && req.method === "POST") {
+    let b;
+    try { b = JSON.parse(await readBody(req)); } catch { return json(res, 400, { error: "bad json" }); }
+    if (!MODES.includes(b.mode)) return json(res, 400, { error: "mode inconnu" });
+    if (b.confirm !== name) return json(res, 400, { error: "Confirmation incorrecte (tapez le nom de l'app)." });
+    if (!parseDumpFile(name, b.file) || !fs.existsSync(path.join(DUMPS, b.file))) return json(res, 404, { error: "dump introuvable" });
+    audit(ip, "db_restore", `${name} ${b.file} ${b.mode}`);
+    const r = startJob(name, "db-restore", [], { task: (push) => restoreDump(push, name, b.file, b.mode) });
+    return r.error ? json(res, 409, { error: r.error, job: jobView(r.job, false) }) : json(res, 202, { job: jobView(r.job, false) });
+  }
+  return json(res, 404, { error: "not found" });
+}
+
 async function route(req, res) {
   const auth = loadAuth();
   const ALLOWED_HOSTS = new Set(auth ? [...LOOPBACK_HOSTS, auth.domain] : LOOPBACK_HOSTS);
@@ -335,7 +476,10 @@ async function route(req, res) {
   if (req.method !== "GET" && req.method !== "HEAD") {
     const origin = req.headers.origin;
     if (origin && !ALLOWED_HOSTS.has(new URL(origin).host)) return json(res, 403, { error: "forbidden origin" });
-    if (!String(req.headers["content-type"] ?? "").startsWith("application/json") || req.headers["x-trema"] !== "1")
+    // Dump upload (T-18) is the only route accepting a binary body; it still requires X-Trema (forces a CORS preflight).
+    const upload = req.method === "POST" && /^\/api\/apps\/[^/]+\/db\/upload$/.test(pubPath);
+    const ctype = String(req.headers["content-type"] ?? "");
+    if (!(ctype.startsWith("application/json") || (upload && ctype.startsWith("application/octet-stream"))) || req.headers["x-trema"] !== "1")
       return json(res, 403, { error: "missing headers" });
   }
   let session = null;
@@ -429,6 +573,7 @@ async function route(req, res) {
       return json(res, 200, cfg);
     }
   }
+  if (sub === "db") return handleDb(name, parts, req, res, url, ip);
   if (sub === "job" && req.method === "GET") {
     const j = lastJob(name);
     return json(res, 200, j ? jobView(j) : null);

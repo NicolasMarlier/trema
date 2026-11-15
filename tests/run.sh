@@ -14,6 +14,16 @@ bash server/prune_dumps.sh "$T/d" 10
 [[ -e "$T/d/trema-my-app-2026-01-12T1000.sql" && ! -e "$T/d/trema-my-app-2026-01-01T1000.sql" ]] || fail "newest kept"
 [[ -e "$T/d/notes.txt" ]] || fail "non-dump kept"
 
+# prune: new extensions and safety/upload dumps count too, other apps untouched
+mkdir "$T/e"
+for i in 01 02 03 04 05 06; do
+  touch "$T/e/trema-blog-2026-02-${i}T1000.dump" "$T/e/trema-blog-2026-02-${i}T1000-pre-restore.dump" "$T/e/trema-blog-2026-02-${i}T1000-upload.sql.gz"
+  touch "$T/e/trema-blog-2-2026-02-${i}T1000.dump"
+done
+bash server/prune_dumps.sh "$T/e" 4
+[[ $(ls "$T/e"/trema-blog-2026-* | wc -l) -eq 4 ]] || fail "blog keep 4 (mixed kinds)"
+[[ $(ls "$T/e"/trema-blog-2-* | wc -l) -eq 4 ]] || fail "blog-2 keep 4"
+
 # setup idempotent
 mkdir -p "$T/r"
 export TREMA_HOST=ex.fr

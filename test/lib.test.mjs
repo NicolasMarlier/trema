@@ -40,8 +40,8 @@ test("appStatus", () => {
   assert.equal(l.appStatus([{ state: "running" }, { state: "exited" }]), "degraded");
 });
 test("parseDockerPs extracts compose project", () => {
-  const line = JSON.stringify({ Names: "blog-web-1", State: "running", Labels: "a=b,com.docker.compose.project=blog" });
-  assert.deepEqual(l.parseDockerPs(line + "\nnotjson"), [{ name: "blog-web-1", state: "running", project: "blog" }]);
+  const line = JSON.stringify({ Names: "blog-web-1", State: "running", Labels: "a=b,com.docker.compose.project=blog,com.docker.compose.service=web" });
+  assert.deepEqual(l.parseDockerPs(line + "\nnotjson"), [{ name: "blog-web-1", state: "running", project: "blog", service: "web" }]);
 });
 test("env values with $ # spaces and quotes round-trip", () => {
   for (const value of ["pa$word", "a #b", "it's", `q"$x`, "plain", " lead"]) {

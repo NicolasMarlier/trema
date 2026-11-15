@@ -7,9 +7,10 @@ import { Confirm, ErrorBox, Gauge, Refreshing, Skeleton, StatusDot, StatusPill }
 import { JobBanner, useJobs } from "./jobs";
 import { Deploys, Env, Logs, Overview, Pending } from "./tabs";
 import { SourceTab } from "./source";
+import { DbTab } from "./db";
 import { useToast } from "./toast";
 
-const TAB_LABEL: Record<Tab, string> = { overview: "Vue d'ensemble", logs: "Logs", env: "Env", source: "Source", deploys: "Déploiements" };
+const TAB_LABEL: Record<Tab, string> = { overview: "Vue d'ensemble", logs: "Logs", env: "Env", source: "Source", deploys: "Déploiements", db: "Base de données" };
 
 function useRoute(): [Route, (r: Route) => void] {
   const [route, setRoute] = useState(() => parseHash(location.hash));
@@ -143,12 +144,13 @@ export function App() {
             {job && <JobBanner job={job} onDismiss={() => dismiss(app.name)} />}
             {app.status === "pending" ? <Pending app={app.name} busy={busy} onRetry={() => create(app.name)} /> : <>
             <div className="tabs" role="tablist">
-              {TABS.map((t) => <a key={t} role="tab" aria-selected={t === route.tab} className={t === route.tab ? "active" : ""} href={buildHash({ app: app.name, tab: t })}>{TAB_LABEL[t]}</a>)}
+              {TABS.filter((t) => t !== "db" || app.hasDb).map((t) => <a key={t} role="tab" aria-selected={t === route.tab} className={t === route.tab ? "active" : ""} href={buildHash({ app: app.name, tab: t })}>{TAB_LABEL[t]}</a>)}
             </div>
             {route.tab === "overview" && <Overview key={app.name} app={app.name} dockerOk={apps.data?.dockerOk ?? true} />}
             {route.tab === "logs" && <Logs key={app.name} app={app.name} />}
             {route.tab === "env" && <Env key={app.name} app={app.name} busy={busy} onRedeploy={track} />}
             {route.tab === "source" && <SourceTab key={app.name} app={app.name} busy={busy} onDeploy={track} />}
+            {route.tab === "db" && app.hasDb && <DbTab key={app.name} app={app.name} busy={busy} onJob={track} version={deploysVersion} />}
             {route.tab === "deploys" && <Deploys key={app.name} app={app.name} version={deploysVersion} />}
             </>}
           </>

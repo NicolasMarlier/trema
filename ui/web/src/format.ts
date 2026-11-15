@@ -56,7 +56,7 @@ export function tail<T>(items: T[], max: number): T[] {
 }
 
 export type Route = { app: string | null; tab: Tab };
-export const TABS = ["overview", "logs", "env", "source", "deploys"] as const;
+export const TABS = ["overview", "logs", "env", "source", "deploys", "db"] as const;
 export type Tab = (typeof TABS)[number];
 
 /** Parse "#/app/tab" (unknown tab -> overview). */
