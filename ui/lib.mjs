@@ -214,3 +214,24 @@ export function localCommands(name, user, host) {
     `git push trema main`,
   ];
 }
+
+/** Value of the effective `PermitRootLogin` in sshd config text (first occurrence wins, like sshd). null = unset (OpenSSH default: prohibit-password). */
+export function parsePermitRootLogin(text) {
+  for (const line of String(text).split("\n")) {
+    const m = line.trim().match(/^PermitRootLogin\s+(\S+)/i);
+    if (m) return m[1].toLowerCase();
+  }
+  return null;
+}
+
+/** Read-only security summary shown in the dashboard. */
+export function securityStatus({ uid, user, sshdConfig, scripts }) {
+  const rootLogin = parsePermitRootLogin(sshdConfig);
+  return {
+    user,
+    nonRoot: uid !== 0,
+    rootSsh: sshdConfig === null ? "unknown" : rootLogin === "no" ? "disabled" : "enabled",
+    sudoScripts: scripts,
+    ok: uid !== 0 && rootLogin === "no" && scripts.length === 2,
+  };
+}

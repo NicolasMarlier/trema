@@ -118,11 +118,12 @@ grep -q '^WEB_PORT=' .env 2>/dev/null || echo "WEB_PORT=$WEB_PORT" >> .env
 
 SUBDOMAIN=$(sanitize_subdomain "$APP_NAME")
 
-sed -i "/proxy_pass/c\proxy_pass http://localhost:$WEB_PORT;" /etc/nginx/sites-enabled/$SUBDOMAIN
-systemctl reload nginx
+VHOST="${TREMA_NGINX_DIR:-/etc/nginx/trema.d}/$SUBDOMAIN"
+sed -i "/proxy_pass/c\proxy_pass http://localhost:$WEB_PORT;" "$VHOST"
+sudo -n /usr/local/sbin/trema-nginx-reload
 echo "Applicating listening locally on: $WEB_PORT"
 
-URL=$(grep -oP 'server_name\s+\K[^;]+' /etc/nginx/sites-enabled/$SUBDOMAIN)
+URL=$(grep -oP 'server_name\s+\K[^;]+' "$VHOST")
 
 echo "✅ Deployment complete, your app is available on: https://$URL"
 

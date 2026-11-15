@@ -19,6 +19,12 @@ Pour les apps Rails (template Trema), `bin/rails db:prepare` est joué à chaque
 
 Les apps déjà déployées doivent lancer `trema update` pour recevoir le nouveau hook.
 
+# Sécurité : pas de root
+Tout tourne sous l'utilisateur dédié `trema` (groupe `docker`, ce qui reste proche de root : seul Docker rootless isolerait vraiment). Root n'est utilisé que via deux scripts qui vérifient leurs arguments, seules commandes en sudo sans mot de passe : `trema-nginx-reload` et `trema-cert <domaine>` (domaine limité à `*.<hôte>`). Les vhosts vivent dans `/etc/nginx/trema.d/`.
+- Nouvelle machine : voir [l'installation](docs/architecture.html#install) (`trema server:setup` crée l'utilisateur, puis `TREMA_USERNAME=trema`).
+- Installation existante en root : `trema server:migrate-user` (idempotente, sans recréer de conteneur ; propose de désactiver le login SSH root).
+- L'interface affiche un encart « Sécurité du serveur » en lecture seule.
+
 # Interface web
 Tableau de bord (apps, statut, logs, variables d'env, redémarrage, historique des déploiements).
 Installer sur le VM : `trema ui:install` (construit le front React/Vite en local, `ui/web` → `ui/dist`, puis rsync + service systemd ; redémarre au reboot, écoute sur 127.0.0.1:4000, aucun `node_modules` sur le VM). Développement : `TREMA_DEV=1 npm start` (serveur, sans login sur la boucle locale ; sans `TREMA_DEV=1` le login est exigé partout) + `cd ui/web && npm run dev` (proxy `/api`). Les valeurs d'env ne sont renvoyées qu'à la demande (`GET /env/:key`) ; les modifications passent par `PATCH /env {set, unset}` et lancent un job asynchrone suivi en direct. Le serveur refuse tout `Host` autre que localhost/127.0.0.1 ou le domaine configuré et tout POST/PUT sans `Content-Type: application/json` + `X-Trema: 1`. Tests : Node ≥ 22.18 requis (les tests importent des fichiers `.ts` ; voir `.tool-versions`).

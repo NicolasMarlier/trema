@@ -1,6 +1,6 @@
 import { jobTitle } from "./resync";
 import { useCallback, useEffect, useState } from "react";
-import { api, appPath, ApiError, type AppsResponse, type AppInfo, type System } from "./api";
+import { api, appPath, ApiError, type AppsResponse, type AppInfo, type System, type Security } from "./api";
 import { buildHash, formatBytes, parseHash, percent, TABS, type Route, type Tab } from "./format";
 import { useResource } from "./useResource";
 import { Confirm, ErrorBox, Gauge, Refreshing, Skeleton, StatusDot, StatusPill } from "./ui";
@@ -21,7 +21,23 @@ function useRoute(): [Route, (r: Route) => void] {
   return [route, (r) => { location.hash = buildHash(r); }];
 }
 
-function Sidebar({ onNew, apps, selected, onSelect, system, hostname, isPublic }: { onNew: () => void; apps: ReturnType<typeof useResource<AppsResponse>>; selected: string | null; onSelect: (n: string) => void; system: System | undefined; hostname?: string; isPublic?: boolean }) {
+function SecurityBox({ sec }: { sec: Security | undefined }) {
+  if (!sec) return null;
+  const yes = (ok: boolean, label: string) => <span className={ok ? "sec-ok" : "sec-warn"}>{ok ? "✓" : "⚠"} {label}</span>;
+  return (
+    <div className="vm" data-testid="security">
+      <div className="section">Sécurité du serveur</div>
+      <div className="gauge">
+        <div className="row"><span>Service</span><span>{sec.user} {yes(sec.nonRoot, sec.nonRoot ? "non-root" : "root")}</span></div>
+        <div className="row"><span>SSH root</span>{yes(sec.rootSsh === "disabled", sec.rootSsh === "disabled" ? "désactivé" : sec.rootSsh === "enabled" ? "actif" : "inconnu")}</div>
+        <div className="row"><span>Sudo sans mot de passe</span>{yes(sec.sudoScripts.length === 2, `${sec.sudoScripts.length} script${sec.sudoScripts.length > 1 ? "s" : ""}`)}</div>
+        {!sec.ok && <p className="mut">Lecture seule. Pour corriger : <code>trema server:migrate-user</code>.</p>}
+      </div>
+    </div>
+  );
+}
+
+function Sidebar({ security, onNew, apps, selected, onSelect, system, hostname, isPublic }: { security?: Security; onNew: () => void; apps: ReturnType<typeof useResource<AppsResponse>>; selected: string | null; onSelect: (n: string) => void; system: System | undefined; hostname?: string; isPublic?: boolean }) {
   return (
     <nav>
       <div className="brand">▲ Trema<small>{hostname ?? ""}</small></div>
@@ -47,6 +63,7 @@ function Sidebar({ onNew, apps, selected, onSelect, system, hostname, isPublic }
           </>
         ) : <div className="stack"><Skeleton h={22} /><Skeleton h={22} /><Skeleton h={22} /></div>}
       </div>
+      <SecurityBox sec={security} />
       {isPublic && (
         <button className="app-item" onClick={async () => { await api("logout", { method: "POST" }).catch(() => {}); location.reload(); }}>Déconnexion</button>
       )}
@@ -59,6 +76,7 @@ export function App() {
   const [route, go] = useRoute();
   const apps = useResource<AppsResponse>("apps", () => api("apps"), 10_000);
   const sys = useResource<System>("system", () => api("system"), 10_000);
+  const sec = useResource<Security>("security", () => api("security"), 60_000);
   const me = useResource<{ public: boolean }>("me", () => api("me"));
   const { jobs, track, restore, dismiss } = useJobs((j) => {
     toast(j.state === "ok" ? "ok" : "error", `${j.app} : ${jobTitle(j.action).toLowerCase()} ${j.state === "ok" ? "terminé" : "échoué"}`);
@@ -103,7 +121,7 @@ export function App() {
 
   return (
     <div className="shell">
-      <Sidebar onNew={() => setCreating(true)} apps={apps} selected={route.app} onSelect={(n) => go({ app: n, tab: route.tab })} system={sys.data} hostname={sys.data?.hostname} isPublic={me.data?.public} />
+      <Sidebar security={sec.data} onNew={() => setCreating(true)} apps={apps} selected={route.app} onSelect={(n) => go({ app: n, tab: route.tab })} system={sys.data} hostname={sys.data?.hostname} isPublic={me.data?.public} />
       <main>
         {apps.data && !apps.data.dockerOk && <div className="banner error">Docker est injoignable : les statuts et les stats ne sont pas à jour.</div>}
         {!route.app || !app ? (

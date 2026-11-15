@@ -57,7 +57,7 @@ img{max-width:100%} .tag{display:inline-block;padding:0 8px;border-radius:10px;f
 <li>Hook et templates sont des copies : versions potentiellement différentes d'une app à l'autre.</li>
 <li>Une seule VM ; pas de haute disponibilité, pas d'observabilité intégrée, pas de sauvegarde automatique de la base (la purge ne conserve que les derniers dumps).</li>
 <li>Template intégré : Rails 3.4.8 (Puma) + Postgres 18 uniquement ; les autres apps doivent fournir leur <code>docker-compose.yml</code> avec un service <code>web</code> sur le port 3000.</li>
-<li>Le hook et <code>init</code> modifient <code>/etc/nginx</code> et redémarrent nginx : l'utilisateur SSH doit en avoir le droit (en pratique, root).</li>
+<li>Sécurité : rien ne tourne en root. L'utilisateur dédié <code>trema</code> est dans le groupe <code>docker</code>, ce qui revient presque à être root (on peut monter <code>/</code> dans un conteneur) : seul Docker rootless donnerait une vraie isolation. Le gain : pas de SSH root, un périmètre sudo restreint (2 scripts qui vérifient leurs arguments) et un service UI non privilégié.</li>
 <li>Un lien symbolique vers <code>bin/trema</code> n'est pas supporté : la CLI localise <code>trema-config</code> et ses dossiers (hooks, templates, server, ui) à partir de son propre chemin, sans suivre les liens.</li>
 <li>Le nom de l'app est le nom du dossier ; deux apps du même nom entrent en collision.</li>
 <li>Certaines commandes (<code>destroy</code>, <code>deploy</code>) sont incomplètes ou non testées de bout en bout ; <code>deploy</code> est appelée mais non définie.</li>
@@ -67,17 +67,20 @@ img{max-width:100%} .tag{display:inline-block;padding:0 8px;border-radius:10px;f
 <h3>Prérequis</h3>
 <ul><li><strong>VM</strong> Linux (Debian/Ubuntu) avec : Docker + plugin compose, nginx, certbot (plugin nginx), <code>git</code>, <code>rsync</code>, Node.js (pour l'interface), <code>jq</code> (recommandé), <code>sudo</code>.</li>
 <li><strong>DNS</strong> : un enregistrement wildcard <code>*.&lt;hôte&gt;</code> vers la VM (chaque app = un sous-domaine, plus <code>trema.&lt;hôte&gt;</code> pour l'interface).</li>
-<li><strong>Accès SSH</strong> par clé, utilisateur autorisé à utiliser Docker et à écrire dans <code>/etc/nginx/sites-enabled</code>.</li>
+<li><strong>Accès SSH</strong> par clé avec un utilisateur <strong>non-root</strong> dédié (<code>trema</code>) : <code>trema server:setup</code> le crée (groupe <code>docker</code>), lui donne <code>/db_dumps</code> et <code>/etc/nginx/trema.d/</code> (vhosts), et installe deux scripts root, seules commandes autorisées en sudo sans mot de passe : <code>/usr/local/sbin/trema-nginx-reload</code> (<code>nginx -t</code> + reload) et <code>trema-cert &lt;domaine&gt;</code> (refuse tout domaine hors <code>&lt;nom&gt;.&lt;hôte&gt;</code>). Les autres actions d'admin (<code>server:setup</code>, <code>ui:install</code>) demandent le mot de passe sudo de <code>trema</code>.</li>
 <li><strong>Poste local</strong> : bash, git, ssh, rsync.</li></ul>
 <h3>Étapes</h3>
 <pre>git clone https://github.com/NicolasMarlier/trema.git
 # ajouter le dossier bin/ du clone au PATH (~/.zshrc ou ~/.bashrc) :
 export PATH="$PWD/trema/bin:$PATH"
 
-trema config:edit --global      # TREMA_HOSTNAME et TREMA_USERNAME par défaut
+trema config:edit --global      # TREMA_HOSTNAME et TREMA_USERNAME=root (le temps de l'installation)
 
-# sur la VM, une fois :
-sudo mkdir -p /db_dumps
+# 1) Nouvelle machine : premier setup (crée l'utilisateur trema, /db_dumps, trema.d, sudoers, scripts root)
+trema server:setup
+#    sur la VM : sudo passwd trema, puis copier votre clé : ssh-copy-id trema@hôte
+trema config:edit --global      # passer TREMA_USERNAME=trema, désactiver ensuite le login SSH root
+#    Machine déjà installée en root : trema server:migrate-user (voir ci-dessous)
 
 # depuis n'importe quel projet git :
 # créer l'app dans l'interface (trema ui), puis copier ses commandes :
@@ -85,6 +88,8 @@ git remote add trema user@hôte:repos/<app>
 trema update                    # copie les templates, lance server:setup, met à jour le hook
 trema ui:install                # interface web
 git push trema main             # déploie</pre>
+<h3>Migrer une installation existante (root → trema)</h3>
+<p><code>trema server:migrate-user</code> se lance une fois (avec <code>TREMA_USERNAME=root</code>) et est idempotente : relancée, elle reprend où elle s'est arrêtée. Elle crée l'utilisateur et les scripts (<code>server:setup</code>), copie les clés SSH autorisées, déplace <code>repos apps envs docker_compose_files trema-ui</code> vers <code>/home/trema</code> (avec <code>chown</code>), déplace les vhosts des apps vers <code>/etc/nginx/trema.d/</code>, réécrit le service <code>trema-ui</code> (<code>User=trema</code>) puis vérifie <code>ssh trema@hôte</code> avant de modifier <code>~/.trema_config</code> et le remote <code>trema</code> du dossier courant. Aucun conteneur n'est recréé (le nom du projet compose ne change pas). Les remotes d'autres projets sont listés (<code>root@</code> → <code>trema@</code>). Elle propose enfin de désactiver <code>PermitRootLogin</code>. Avant de la lancer, définir un mot de passe pour <code>trema</code> (<code>sudo passwd trema</code>) : il sert aux actions d'admin.</p>
 <p>Les commandes d'app lisent l'hôte dans <code>~/.trema_config</code> et le nom de l'app dans le remote <code>trema</code> (ou <code>--app</code>) ; un ancien <code>trema.env</code> est supprimé automatiquement. Lancez <code>update</code> une fois par app pour que son hook soit à jour ; les templates sont nécessaires au premier <code>git push</code> (template Rails).</p>
 
 <script>
@@ -92,10 +97,11 @@ const rows=[
 ["CLI trema","l","bin/trema, bin/trema-config","git clone + PATH"],
 ["Config globale","l","~/.trema_config","trema config:edit"],
 ["Remote git","l","git remote « trema »","commandes copiées depuis l'UI"],
-["nginx + certbot","s","/etc/nginx/sites-enabled","installation de la VM"],
+["nginx + certbot","s","/etc/nginx/trema.d (vhosts, inclus par conf.d/trema.conf)","installation de la VM + server:setup"],
+["Utilisateur trema + sudo limité","s","/etc/sudoers.d/trema, /usr/local/sbin/trema-*","trema server:setup / server:migrate-user"],
 ["Rotation logs Docker","s","/etc/docker/daemon.json","trema server:setup / update"],
 ["Templates Docker","s","~/docker_compose_files","trema update"],
-["Dumps SQL + purge","s","/db_dumps, /etc/cron.d/trema-prune-dumps","mkdir manuel + server:setup"],
+["Dumps SQL + purge","s","/db_dumps, /etc/cron.d/trema-prune-dumps","server:setup"],
 ["Interface web","s","~/trema-ui, trema-ui.service, vhost trema.<hôte>","trema ui:install"],
 ["Dépôt nu","a","~/repos/<app>","création depuis l'UI"],
 ["Hook post-receive","a","~/repos/<app>/hooks","UI / update (copie)"],

@@ -7,6 +7,7 @@ usage() {
     trema ssh
     trema console
     trema server:setup
+    trema server:migrate-user  # moves a root install to the dedicated non-root user (run once)
     trema destroy
     trema env
     trema migrate
@@ -37,7 +38,37 @@ logs() {
 
 server_setup() {
     rsync -r "$(trema_path)/server" $TREMA_USERNAME@$TREMA_HOSTNAME:~/trema_server
-    do_ssh "sudo bash ~/trema_server/server/setup.sh"
+    do_ssh "sudo TREMA_HOST=$TREMA_HOSTNAME TREMA_USER=$TREMA_USERNAME bash ~/trema_server/server/setup.sh"
+}
+
+# One-shot migration of a root install to the dedicated user (default: trema).
+migrate_user() {
+    local new="${TREMA_NEW_USER:-trema}" old="$TREMA_USERNAME"
+    if [[ "$old" == "$new" ]]; then echo "Already using $new (~/.trema_config): nothing to do."; return 0; fi
+    if [[ "$old" != "root" ]]; then
+        echo "Error: TREMA_USERNAME is '$old', not root. Migration expects the root install." >&2; return 1
+    fi
+    rsync -r "$(trema_path)/server" "$old@$TREMA_HOSTNAME:trema_server" || return 1
+    ssh -t "$old@$TREMA_HOSTNAME" "TREMA_HOST=$TREMA_HOSTNAME TREMA_USER=$new bash ~/trema_server/server/migrate_user.sh" || { echo "❌ Migration failed (re-run: it resumes where it stopped)." >&2; return 1; }
+    echo "[verify] ssh $new@$TREMA_HOSTNAME"
+    ssh -o BatchMode=yes "$new@$TREMA_HOSTNAME" "docker ps -q | wc -l" >/dev/null || { echo "❌ ssh $new@$TREMA_HOSTNAME failed: ~/.trema_config left unchanged, root login kept." >&2; return 1; }
+    echo " ✓ ssh and docker OK"
+    sed -i.bak "s/^TREMA_USERNAME=.*/TREMA_USERNAME=$new/" "$GLOBAL_CONFIG" && rm -f "$GLOBAL_CONFIG.bak"
+    echo " ✓ ~/.trema_config: TREMA_USERNAME=$new"
+    local url; url=$(trema_remote_url)
+    if [[ "$url" == "$old@"* ]]; then git remote set-url trema "$new@${url#*@}"; echo " ✓ remote 'trema' updated"; fi
+    local others; others=$(git remote -v 2>/dev/null | awk -v o="$old@" 'index($2,o)==1 {print $1}' | sort -u | tr '\n' ' ')
+    [[ -z "$others" ]] || echo " ⚠ Other remotes to update (root@ → $new@): $others"
+    echo "   In other projects: git remote set-url trema $new@$TREMA_HOSTNAME:repos/<app>"
+    echo "   Admin actions (server:setup, ui:install) now use sudo with the $new password: set it with 'sudo passwd $new' on the VM."
+    local a
+    read -rp "Disable SSH root login (PermitRootLogin no)? [y/N] " a
+    if [[ "$a" =~ ^[yY] ]]; then
+        ssh -t "$new@$TREMA_HOSTNAME" "sudo sh -c \"mkdir -p /etc/ssh/sshd_config.d && echo 'PermitRootLogin no' > /etc/ssh/sshd_config.d/00-trema.conf && sshd -t && (systemctl reload ssh || systemctl reload sshd)\"" && echo " ✓ root SSH login disabled" || echo " ❌ failed, unchanged" >&2
+    else
+        echo "   Recommended later: PermitRootLogin no in /etc/ssh/sshd_config."
+    fi
+    echo "✅ Migration done. Containers were not recreated."
 }
 
 do_ssh() {
@@ -63,8 +94,7 @@ destroy() {
     do_ssh "rm -rf repos/$TREMA_PROJECT_NAME"
     do_ssh "rm -rf apps/$TREMA_PROJECT_NAME"
     do_ssh "rm -rf envs/$TREMA_PROJECT_NAME.env"
-    do_ssh "rm /etc/nginx/sites-enabled/$SUBDOMAIN"
-    do_ssh "systemctl restart nginx"
+    do_ssh "rm -f /etc/nginx/trema.d/$SUBDOMAIN && sudo -n /usr/local/sbin/trema-nginx-reload"
     git remote remove trema 2>/dev/null
 }
 
@@ -225,15 +255,15 @@ server {
 }
 EOF
     rsync tmp-nginx-config $TREMA_USERNAME@$TREMA_HOSTNAME:/tmp/trema-ui-nginx && rm tmp-nginx-config
-    do_ssh "sudo mv /tmp/trema-ui-nginx /etc/nginx/sites-enabled/trema-ui && sudo certbot --nginx --non-interactive --domains $domain && sudo systemctl reload nginx"
+    do_ssh "mv /tmp/trema-ui-nginx /etc/nginx/trema.d/trema-ui && sudo -n /usr/local/sbin/trema-cert $domain && sudo -n /usr/local/sbin/trema-nginx-reload"
 }
 
 ui_install() {
     # Build the React bundle locally; the server only receives static files (no node_modules).
     (cd "$(trema_path)/ui/web" && npm install --no-audit --no-fund && npm run build) || { echo "❌ UI build failed"; exit 1; }
     rsync -r --delete --exclude node_modules --exclude web $(trema_path)/ui $(trema_path)/hooks $(trema_path)/package.json $TREMA_USERNAME@$TREMA_HOSTNAME:trema-ui/
-    # Lets the UI create apps (certbot needs root): only these two commands, without password.
-    do_ssh "printf '%s ALL=(root) NOPASSWD: /usr/bin/certbot --nginx --non-interactive --domains *, /usr/bin/systemctl reload nginx\n' \"\$USER\" | sudo tee /etc/sudoers.d/trema-ui >/dev/null && sudo chmod 440 /etc/sudoers.d/trema-ui && sudo visudo -cf /etc/sudoers.d/trema-ui >/dev/null || { sudo rm -f /etc/sudoers.d/trema-ui; echo '❌ invalid sudoers rule' >&2; exit 1; }"
+    # Root-side helpers (sudoers, trema-cert, trema.d) come from `trema server:setup`: required first.
+    do_ssh "test -x /usr/local/sbin/trema-cert" || { echo "❌ Run 'trema server:setup' first (installs the restricted sudo scripts)." >&2; exit 1; }
     if ! do_ssh "test -f ~/trema-ui/auth.json"; then
         ask_ui_password || exit 1
         ui_set_password || exit 1
@@ -271,6 +301,7 @@ case "$1" in
 
     ssh) load_env; do_ssh ;;
     server:setup) load_env; server_setup ;;
+    server:migrate-user) load_env; migrate_user ;;
     ui:install) load_env; ui_install ;;
     ui:password) load_env; ui_password ;;
 

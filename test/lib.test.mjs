@@ -96,3 +96,14 @@ test("localCommands", () => {
   assert.equal(c[0], "git remote add trema u@h.fr:repos/blog");
   assert.deepEqual(c, ["git remote add trema u@h.fr:repos/blog", "git push trema main"]);
 });
+
+test("parsePermitRootLogin: first occurrence wins, comments ignored", () => {
+  assert.equal(l.parsePermitRootLogin("# PermitRootLogin yes\nPermitRootLogin no\nPermitRootLogin yes"), "no");
+  assert.equal(l.parsePermitRootLogin("Port 22"), null);
+});
+test("securityStatus", () => {
+  const s = l.securityStatus({ uid: 1000, user: "trema", sshdConfig: "PermitRootLogin no", scripts: ["a", "b"] });
+  assert.deepEqual([s.nonRoot, s.rootSsh, s.ok], [true, "disabled", true]);
+  assert.equal(l.securityStatus({ uid: 0, user: "root", sshdConfig: "", scripts: [] }).ok, false);
+  assert.equal(l.securityStatus({ uid: 1, user: "x", sshdConfig: null, scripts: [] }).rootSsh, "unknown");
+});

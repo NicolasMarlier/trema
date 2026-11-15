@@ -56,3 +56,5 @@ table{width:100%;border-collapse:collapse}th{text-align:left;color:var(--mut);fo
 .form label.check { display: flex; align-items: center; gap: 8px; }
 .form select, .form input[type="text"], .form input:not([type]) { padding: 6px 8px; }
 .resync{font-size:12px;margin-top:6px}
+
+.sec-ok{color:var(--ok,#2a9d4b)}.sec-warn{color:var(--warn,#c77d00)}.vm .mut{font-size:11px;margin:4px 0 0}
