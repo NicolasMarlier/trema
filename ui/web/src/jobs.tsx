@@ -86,7 +86,7 @@ export function JobBanner({ job, onDismiss }: { job: JobState; onDismiss: () => 
       </div>
       {running && <div className="progress"><div /></div>}
       {running && job.resyncing && <div className="mut resync">connexion interrompue, resynchronisation…</div>}
-      {open && <pre ref={pre}>{job.output || "En attente de la sortie de docker compose…"}</pre>}
+      {open && <pre ref={pre}>{job.output || "En attente de la sortie…"}</pre>}
     </div>
   );
 }

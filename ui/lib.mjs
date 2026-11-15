@@ -170,7 +170,7 @@ export function parseDockerPs(text) {
       try { return JSON.parse(l); } catch { return null; }
     })
     .filter(Boolean)
-    .map((c) => ({ name: c.Names, state: c.State, project: parseLabel(c.Labels, "com.docker.compose.project") }));
+    .map((c) => ({ name: c.Names, state: c.State, project: parseLabel(c.Labels, "com.docker.compose.project"), service: parseLabel(c.Labels, "com.docker.compose.service") }));
 }
 
 function parseLabel(labels, key) {
