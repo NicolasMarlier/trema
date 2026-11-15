@@ -48,7 +48,8 @@ SITES="${SITES_DIR:-$ROOT/etc/nginx/sites-enabled}"; TD="$ROOT/etc/nginx/trema.d
 names=(trema-ui)
 for d in "$DEST_HOME"/apps/* "$DEST_HOME"/repos/*; do [[ -e "$d" ]] && names+=("$(sanitize "$(basename "$d" .git)")"); done
 for n in $(printf '%s\n' "${names[@]}" | sort -u); do
-    if [[ -e "$SITES/$n" && ! -e "$TD/$n" ]]; then cp -L "$SITES/$n" "$TD/$n"; rm -f "$SITES/$n"; echo " ✓ $n"; fi
+    if [[ -e "$SITES/$n" && ! -e "$TD/$n" ]]; then cp -L "$SITES/$n" "$TD/$n"; rm -f "$SITES/$n"; echo " ✓ $n"
+    elif [[ -e "$SITES/$n" && -e "$TD/$n" ]]; then rm -f "$SITES/$n"; echo " ✓ $n (duplicate removed)"; fi
 done
 sys chown -R "$TREMA_USER": "$TD"
 if [[ -z "$ROOT" ]]; then nginx -t && systemctl reload nginx; fi

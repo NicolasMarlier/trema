@@ -257,7 +257,7 @@ server {
 }
 EOF
     rsync tmp-nginx-config $TREMA_USERNAME@$TREMA_HOSTNAME:/tmp/trema-ui-nginx && rm tmp-nginx-config
-    do_ssh "mv /tmp/trema-ui-nginx /etc/nginx/trema.d/trema-ui && sudo -n /usr/local/sbin/trema-cert $domain && sudo -n /usr/local/sbin/trema-nginx-reload"
+    do_ssh "mv /tmp/trema-ui-nginx /etc/nginx/trema.d/trema-ui && { rm -f /etc/nginx/sites-enabled/trema-ui 2>/dev/null || sudo -n rm -f /etc/nginx/sites-enabled/trema-ui 2>/dev/null || true; } && sudo -n /usr/local/sbin/trema-cert $domain && sudo -n /usr/local/sbin/trema-nginx-reload"
 }
 
 ui_install() {
