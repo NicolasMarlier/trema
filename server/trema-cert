@@ -15,4 +15,9 @@ if ! [[ "$domain" =~ ^${label_re}\.${host//./\\.}$ ]]; then
     exit 2
 fi
 if [[ -n "$TREMA_CERT_DRY_RUN" ]]; then echo "certbot --nginx --non-interactive --domains $domain"; exit 0; fi
-exec /usr/bin/certbot --nginx --non-interactive --domains "$domain"
+# Fixed root-owned locations only (no $PATH lookup under sudo): apt installs /usr/bin, snap installs /snap/bin.
+for certbot in /usr/bin/certbot /snap/bin/certbot; do
+    [[ -x "$certbot" ]] && exec "$certbot" --nginx --non-interactive --domains "$domain"
+done
+echo "trema-cert: certbot not found in /usr/bin or /snap/bin" >&2
+exit 1

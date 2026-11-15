@@ -266,7 +266,23 @@ server {
 }
 EOF
     rsync tmp-nginx-config $TREMA_USERNAME@$TREMA_HOSTNAME:/tmp/trema-ui-nginx && rm tmp-nginx-config
-    do_ssh "mv /tmp/trema-ui-nginx /etc/nginx/trema.d/trema-ui && { rm -f /etc/nginx/sites-enabled/trema-ui 2>/dev/null || sudo -n rm -f /etc/nginx/sites-enabled/trema-ui 2>/dev/null || true; } && sudo -n /usr/local/sbin/trema-cert $domain && sudo -n /usr/local/sbin/trema-nginx-reload"
+    # The new vhost is HTTP-only until certbot adds the TLS block. If certbot fails, restore the previous
+    # vhosts: otherwise the next nginx reload (any app deploy) would serve trema.<host> without TLS.
+    do_ssh "set -e
+        f=/etc/nginx/trema.d/trema-ui; legacy=/etc/nginx/sites-enabled/trema-ui; bak=/tmp/trema-ui-nginx.bak
+        rm -rf \$bak && mkdir -p \$bak
+        [ -f \$f ] && cp -p \$f \$bak/trema.d || true
+        [ -f \$legacy ] && cp -p \$legacy \$bak/legacy || true
+        mv /tmp/trema-ui-nginx \$f
+        rm -f \$legacy 2>/dev/null || sudo -n rm -f \$legacy 2>/dev/null || true
+        if ! sudo -n /usr/local/sbin/trema-cert $domain; then
+            if [ -f \$bak/trema.d ]; then cp -p \$bak/trema.d \$f; else rm -f \$f; fi
+            [ -f \$bak/legacy ] && { cp -p \$bak/legacy \$legacy 2>/dev/null || sudo -n cp -p \$bak/legacy \$legacy 2>/dev/null || echo \"⚠️  could not restore \$legacy (backup in \$bak)\" >&2; }
+            echo '❌ trema-cert failed: previous nginx vhost restored, nginx not reloaded.' >&2
+            exit 1
+        fi
+        rm -rf \$bak
+        sudo -n /usr/local/sbin/trema-nginx-reload" || exit 1
 }
 
 ui_install() {
