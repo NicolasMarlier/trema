@@ -6,7 +6,7 @@ import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import os from "node:os";
 import { spawn } from "node:child_process";
-import { isValidAppName, parseEnv, applyEnvPatch, formatDeployLine, parseDeploys, parseDockerPs, appStatus, isSecretKey,
+import { securityStatus, isValidAppName, parseEnv, applyEnvPatch, formatDeployLine, parseDeploys, parseDockerPs, appStatus, isSecretKey,
   parseNginxUrl, parseMeminfo, parseDf, parseCpuTimes, cpuPercent, validateNewAppName, mergeAppNames, localCommands } from "./lib.mjs";
 import { provisionApp } from "./provision.mjs";
 import { verifySignature, appJwt, appManifest, createStateStore, validateSource, selectApps, gitAuthHeader } from "./github.mjs";
@@ -17,7 +17,7 @@ const HOME = process.env.TREMA_HOME || process.env.HOME;
 const APPS = path.join(HOME, "apps");
 const PORT = Number(process.env.PORT || 4000);
 const PUBLIC = path.join(path.dirname(fileURLToPath(import.meta.url)), "dist");
-const NGINX_SITES = process.env.TREMA_NGINX_SITES || "/etc/nginx/sites-enabled";
+const NGINX_SITES = process.env.TREMA_NGINX_SITES || "/etc/nginx/trema.d";
 const read = (f) => (fs.existsSync(f) ? fs.readFileSync(f, "utf8") : "");
 
 const sh = (cmd, args, opts = {}) =>
@@ -288,6 +288,20 @@ function serverHost() {
   return d ? d.replace(/^trema\./, "") : os.hostname();
 }
 
+// Read-only: who runs the service, whether root SSH login is off, which root helper scripts exist.
+function security() {
+  const sshd = [process.env.TREMA_SSHD_CONFIG || "/etc/ssh/sshd_config"];
+  const dir = process.env.TREMA_SSHD_DIR || "/etc/ssh/sshd_config.d";
+  try { sshd.unshift(...fs.readdirSync(dir).filter((f) => f.endsWith(".conf")).sort().map((f) => path.join(dir, f))); } catch {}
+  const texts = sshd.map((f) => { try { return fs.readFileSync(f, "utf8"); } catch { return null; } }).filter((t) => t !== null);
+  const sbin = process.env.TREMA_SBIN || "/usr/local/sbin";
+  return securityStatus({
+    uid: process.getuid?.() ?? 0, user: os.userInfo().username,
+    sshdConfig: texts.length ? texts.join("\n") : null,
+    scripts: ["trema-nginx-reload", "trema-cert"].filter((n) => fs.existsSync(path.join(sbin, n))),
+  });
+}
+
 // Creates (or retries) the server side of an app: bare repo, hook, nginx vhost, certificate.
 async function createApp(req, res) {
   let name;
@@ -354,6 +368,7 @@ async function route(req, res) {
   if (parts[1] === "me") return json(res, 200, { public: !tunnel });
   if (parts[1] === "apps" && parts.length === 2 && req.method === "GET") return json(res, 200, { dockerOk: cache.dockerOk !== false, apps: listApps() });
   if (parts[1] === "system" && parts.length === 2) return json(res, 200, { ...cache.system, hostname: os.hostname(), at: cache.at, dockerOk: cache.dockerOk !== false });
+  if (parts[1] === "security" && parts.length === 2 && req.method === "GET") return json(res, 200, security());
   if (parts[1] === "jobs" && parts[2]) {
     const job = jobs.get(parts[2]);
     if (!job) return json(res, 404, { error: "not found" });

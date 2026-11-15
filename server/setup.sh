@@ -2,12 +2,16 @@
 # Idempotent server setup (run on the VM, as root or with sudo):
 #  - Docker default log rotation in /etc/docker/daemon.json
 #  - daily cron pruning /db_dumps (keep last 10 per app)
-# Env: TREMA_RESTART_DOCKER=yes|no|ask (default ask), TREMA_ROOT (testing), 
+#  - dedicated non-root user (TREMA_USER, default trema, docker group) owning /db_dumps and /etc/nginx/trema.d
+#  - the only 2 root commands the user may run without password: trema-nginx-reload, trema-cert <domain>
+# Env: TREMA_HOST (required with the user setup: base domain), TREMA_USER, TREMA_RESTART_DOCKER=yes|no|ask (default ask), TREMA_ROOT (testing), 
 set -e
 ROOT="${TREMA_ROOT:-}"
 MAX_SIZE="${TREMA_LOG_MAX_SIZE:-20m}"
 MAX_FILE="${TREMA_LOG_MAX_FILE:-5}"
 KEEP="${TREMA_DUMPS_KEEP:-10}"
+TREMA_USER="${TREMA_USER:-trema}"
+HOST="${TREMA_HOST:-}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
 DAEMON="$ROOT/etc/docker/daemon.json"
@@ -45,3 +49,46 @@ if [[ -z "$ROOT" && "$changed" == yes ]]; then
     if [[ "$mode" == yes ]]; then systemctl restart docker; echo "✅ Docker restarted"
     else echo "ℹ️  Applied at next Docker restart; containers need --force-recreate."; fi
 fi
+
+# ---- Dedicated user, nginx vhost dir, root scripts, sudoers ----
+[[ "$TREMA_USER" =~ ^[a-z_][a-z0-9_-]*$ ]] || { echo "Invalid TREMA_USER" >&2; exit 1; }
+if [[ -z "$ROOT" ]]; then
+    if id "$TREMA_USER" >/dev/null 2>&1; then
+        usermod -aG docker "$TREMA_USER" 2>/dev/null || true
+    else
+        useradd --create-home --shell /bin/bash --groups docker "$TREMA_USER"
+        echo "ℹ️  User $TREMA_USER created: set a password (sudo passwd $TREMA_USER) and add your SSH key."
+    fi
+fi
+# Copy the caller's authorized_keys so `ssh $TREMA_USER@host` works without password auth
+if [[ -z "$ROOT" && -n "${TREMA_AUTH_FROM:-}" && -s "$TREMA_AUTH_FROM" ]]; then
+    UH=$(getent passwd "$TREMA_USER" | cut -d: -f6)
+    if [[ -n "$UH" && "$UH" != "$(dirname "$(dirname "$TREMA_AUTH_FROM")")" ]]; then
+        install -d -m 700 -o "$TREMA_USER" -g "$TREMA_USER" "$UH/.ssh"
+        touch "$UH/.ssh/authorized_keys"
+        cat "$TREMA_AUTH_FROM" >> "$UH/.ssh/authorized_keys"
+        sort -u "$UH/.ssh/authorized_keys" -o "$UH/.ssh/authorized_keys"
+        chown "$TREMA_USER": "$UH/.ssh/authorized_keys"; chmod 600 "$UH/.ssh/authorized_keys"
+        echo "✅ SSH keys copied to $TREMA_USER"
+    fi
+fi
+echo "✅ User $TREMA_USER (docker group)"
+
+mkdir -p "$ROOT/db_dumps" "$ROOT/etc/nginx/trema.d" "$ROOT/etc/nginx/conf.d" "$ROOT/etc/trema" "$ROOT/usr/local/sbin" "$ROOT/etc/sudoers.d"
+if [[ -z "$ROOT" ]]; then chown "$TREMA_USER": /db_dumps /etc/nginx/trema.d; fi
+echo 'include /etc/nginx/trema.d/*;' > "$ROOT/etc/nginx/conf.d/trema.conf"
+if [[ -n "$HOST" ]]; then echo "$HOST" > "$ROOT/etc/trema/host"; fi
+[[ -f "$ROOT/etc/trema/host" ]] || { echo "TREMA_HOST missing: cannot configure trema-cert" >&2; exit 1; }
+echo "✅ /db_dumps and /etc/nginx/trema.d owned by $TREMA_USER"
+
+for s in trema-nginx-reload trema-cert; do install -m 755 "$HERE/$s" "$ROOT/usr/local/sbin/$s"; done
+SUDOERS="$ROOT/etc/sudoers.d/trema"
+cat > "$SUDOERS.tmp" <<EOF
+# Managed by trema server:setup. Only these two commands, without password.
+$TREMA_USER ALL=(root) NOPASSWD: /usr/local/sbin/trema-nginx-reload, /usr/local/sbin/trema-cert *
+EOF
+chmod 440 "$SUDOERS.tmp"
+if [[ -z "$ROOT" ]] && ! visudo -cf "$SUDOERS.tmp" >/dev/null; then rm -f "$SUDOERS.tmp"; echo "❌ invalid sudoers rule" >&2; exit 1; fi
+mv "$SUDOERS.tmp" "$SUDOERS"
+rm -f "$ROOT/etc/sudoers.d/trema-ui"   # legacy wildcard certbot rule
+echo "✅ sudo without password limited to trema-nginx-reload and trema-cert <domain>"

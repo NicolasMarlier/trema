@@ -28,3 +28,4 @@ export const appPath = (name: string, sub = "") => `apps/${encodeURIComponent(na
 export type Source = { repo: string; branch: string; rootDir: string; autoDeploy: boolean; alwaysDeploy: boolean; installationId: number | null };
 export type GhRepo = { repo: string; private: boolean; defaultBranch: string; installationId: number; account?: string };
 export type GhStatus = { configured: boolean; slug: string | null; htmlUrl: string | null; webhookUrl: string; deliveries: { date: string; repo: string; ref: string; commit: string; results: { app: string; action: string; reason?: string }[] }[] };
+export type Security = { user: string; nonRoot: boolean; rootSsh: "disabled" | "enabled" | "unknown"; sudoScripts: string[]; ok: boolean };

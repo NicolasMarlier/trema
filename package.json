@@ -6,6 +6,6 @@
   "scripts": {
     "start": "node ui/server.mjs",
     "deploy": "bash bin/trema-deploy",
-    "test": "bash -n hooks/post-receive && bash -n bin/trema && bash -n bin/trema-config && bash -n bin/trema-deploy && bash tests/run.sh && node --test test/*.test.mjs"
+    "test": "bash -n hooks/post-receive && bash -n bin/trema && bash -n bin/trema-config && bash -n bin/trema-deploy && bash -n server/migrate_user.sh && bash -n server/trema-cert && bash -n server/trema-nginx-reload && bash tests/run.sh && node --test test/*.test.mjs"
   }
 }

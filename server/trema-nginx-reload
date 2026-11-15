@@ -1,0 +1,7 @@
+#!/bin/bash
+# Installed as /usr/local/sbin/trema-nginx-reload (root:root 755), run via `sudo -n` by the trema user.
+# Takes no argument: tests the nginx config, then reloads nginx.
+set -e
+[[ $# -eq 0 ]] || { echo "trema-nginx-reload: no argument expected" >&2; exit 2; }
+nginx -t
+systemctl reload nginx

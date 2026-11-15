@@ -29,8 +29,8 @@ export async function provisionApp({ home, name, host, nginxSites, hooksDir, run
       fs.writeFileSync(f, nginxVhost(name, host));
       return true;
     }],
-    ["Certificat HTTPS (certbot)", () => run("sudo", ["-n", "certbot", "--nginx", "--non-interactive", "--domains", domain])],
-    ["Rechargement nginx", () => run("sudo", ["-n", "systemctl", "reload", "nginx"])],
+    ["Certificat HTTPS (certbot)", () => run("sudo", ["-n", "/usr/local/sbin/trema-cert", domain])],
+    ["Rechargement nginx", () => run("sudo", ["-n", "/usr/local/sbin/trema-nginx-reload"])],
   ];
   for (const [i, [label, fn]] of steps.entries()) {
     push(`[${i + 1}/${steps.length}] ${label}\n`);
