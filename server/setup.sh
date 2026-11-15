@@ -60,6 +60,18 @@ if [[ -z "$ROOT" ]]; then
         echo "ℹ️  User $TREMA_USER created: set a password (sudo passwd $TREMA_USER) and add your SSH key."
     fi
 fi
+# Copy the caller's authorized_keys so `ssh $TREMA_USER@host` works without password auth
+if [[ -z "$ROOT" && -n "${TREMA_AUTH_FROM:-}" && -s "$TREMA_AUTH_FROM" ]]; then
+    UH=$(getent passwd "$TREMA_USER" | cut -d: -f6)
+    if [[ -n "$UH" && "$UH" != "$(dirname "$(dirname "$TREMA_AUTH_FROM")")" ]]; then
+        install -d -m 700 -o "$TREMA_USER" -g "$TREMA_USER" "$UH/.ssh"
+        touch "$UH/.ssh/authorized_keys"
+        cat "$TREMA_AUTH_FROM" >> "$UH/.ssh/authorized_keys"
+        sort -u "$UH/.ssh/authorized_keys" -o "$UH/.ssh/authorized_keys"
+        chown "$TREMA_USER": "$UH/.ssh/authorized_keys"; chmod 600 "$UH/.ssh/authorized_keys"
+        echo "✅ SSH keys copied to $TREMA_USER"
+    fi
+fi
 echo "✅ User $TREMA_USER (docker group)"
 
 mkdir -p "$ROOT/db_dumps" "$ROOT/etc/nginx/trema.d" "$ROOT/etc/nginx/conf.d" "$ROOT/etc/trema" "$ROOT/usr/local/sbin" "$ROOT/etc/sudoers.d"

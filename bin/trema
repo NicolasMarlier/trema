@@ -38,7 +38,9 @@ logs() {
 
 server_setup() {
     rsync -r "$(trema_path)/server" $TREMA_USERNAME@$TREMA_HOSTNAME:~/trema_server
-    do_ssh "sudo TREMA_HOST=$TREMA_HOSTNAME TREMA_USER=$TREMA_USERNAME bash ~/trema_server/server/setup.sh"
+    local target="$TREMA_USERNAME"
+    [[ "$target" == root ]] && target="${TREMA_NEW_USER:-trema}"
+    do_ssh "sudo TREMA_HOST=$TREMA_HOSTNAME TREMA_USER=$target TREMA_AUTH_FROM=\$HOME/.ssh/authorized_keys bash ~/trema_server/server/setup.sh"
 }
 
 # One-shot migration of a root install to the dedicated user (default: trema).

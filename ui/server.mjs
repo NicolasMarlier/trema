@@ -293,7 +293,7 @@ function security() {
   const sshd = [process.env.TREMA_SSHD_CONFIG || "/etc/ssh/sshd_config"];
   const dir = process.env.TREMA_SSHD_DIR || "/etc/ssh/sshd_config.d";
   try { sshd.unshift(...fs.readdirSync(dir).filter((f) => f.endsWith(".conf")).sort().map((f) => path.join(dir, f))); } catch {}
-  const texts = sshd.filter((f) => fs.existsSync(f)).map((f) => fs.readFileSync(f, "utf8"));
+  const texts = sshd.map((f) => { try { return fs.readFileSync(f, "utf8"); } catch { return null; } }).filter((t) => t !== null);
   const sbin = process.env.TREMA_SBIN || "/usr/local/sbin";
   return securityStatus({
     uid: process.getuid?.() ?? 0, user: os.userInfo().username,
