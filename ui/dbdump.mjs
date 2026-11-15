@@ -4,10 +4,10 @@ export const EXTENSIONS = ["dump", "sql", "sql.gz"];
 const FILE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,200}\.(dump|sql|sql\.gz)$/;
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-/** Local timestamp "YYYY-MM-DDTHHMM" used in dump names (sorts lexicographically). */
+/** Local timestamp "YYYY-MM-DDTHHMMSS" used in dump names (sorts lexicographically). */
 export function dumpStamp(d = new Date()) {
   const p = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}${p(d.getMinutes())}`;
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
 }
 
 /** trema-<app>-<stamp>[-pre-restore|-upload].<ext> */
@@ -24,7 +24,7 @@ export function isValidDumpFile(name) {
 /** Describes a file of /db_dumps if it is a dump of `app`, else null. */
 export function parseDumpFile(app, file) {
   if (!isValidDumpFile(file)) return null;
-  const m = file.match(new RegExp(`^trema-${escapeRe(app)}-(\\d{4}-\\d{2}-\\d{2}T\\d{4})(-pre-restore|-upload)?\\.(dump|sql|sql\\.gz)$`));
+  const m = file.match(new RegExp(`^trema-${escapeRe(app)}-(\\d{4}-\\d{2}-\\d{2}T\\d{4,6})(-pre-restore|-upload)?\\.(dump|sql|sql\\.gz)$`));
   if (!m) return null;
   return { file, stamp: m[1], origin: m[2] === "-pre-restore" ? "pre-restore" : m[2] === "-upload" ? "upload" : "manual", ext: m[3] };
 }

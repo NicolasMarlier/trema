@@ -1,3 +1,4 @@
+import zlib from "node:zlib";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -7,7 +8,7 @@ import { spawn, execFileSync } from "node:child_process";
 import { dumpFileName, dumpStamp, isValidDumpFile, parseDumpFile, uploadExt, detectFormat, planSteps, restoreScript, dropSchemaScript, dumpScript } from "../ui/dbdump.mjs";
 
 test("dump file names", () => {
-  assert.equal(dumpStamp(new Date(2026, 0, 2, 3, 4)), "2026-01-02T0304");
+  assert.equal(dumpStamp(new Date(2026, 0, 2, 3, 4, 5)), "2026-01-02T030405");
   assert.equal(dumpFileName("blog", "2026-01-02T0304"), "trema-blog-2026-01-02T0304.dump");
   assert.equal(dumpFileName("blog", "2026-01-02T0304", "pre-restore"), "trema-blog-2026-01-02T0304-pre-restore.dump");
   assert.equal(dumpFileName("blog", "2026-01-02T0304", "upload", "sql.gz"), "trema-blog-2026-01-02T0304-upload.sql.gz");
@@ -129,5 +130,24 @@ exit 0
     assert.ok(fs.readdirSync(dumps).some((f) => f.endsWith("-pre-restore.dump")), "safety dump");
     const log = fs.readFileSync(calls, "utf8");
     assert.ok(log.indexOf("stop web") < log.indexOf("DROP SCHEMA") && log.indexOf("DROP SCHEMA") < log.indexOf("pg_restore") && log.indexOf("pg_restore") < log.indexOf("db:prepare") && log.indexOf("db:prepare") < log.indexOf("start web"), log);
+
+    // names never collide: a second restore in the same second keeps the first safety dump
+    const safetyDumps = () => fs.readdirSync(dumps).filter((f) => f.endsWith("-pre-restore.dump"));
+    const first = safetyDumps()[0];
+    fs.writeFileSync(path.join(dumps, first), "PGDMPgood");
+    const again = await rs({ file: first, mode: "full", confirm: "blog" });
+    assert.equal((await waitJob((await again.json()).job.id)).state, "ok");
+    assert.equal(safetyDumps().length, 2);
+    assert.equal(fs.readFileSync(path.join(dumps, first), "utf8"), "PGDMPgood");
+    const up2 = await (await up("a.dump", "PGDMPsecond")).json();
+    assert.notEqual(up2.file, uploaded);
+    assert.equal(fs.readFileSync(path.join(dumps, uploaded), "utf8"), "PGDMPupload");
+
+    // a truncated .sql.gz must fail the restore (not commit a partial load)
+    const gz = zlib.gzipSync(Buffer.from("SELECT 1;\n".repeat(5000)));
+    const bad = path.join(dumps, "trema-blog-2020-01-01T000000.sql.gz");
+    fs.writeFileSync(bad, gz.subarray(0, Math.floor(gz.length / 2)));
+    const rb = await rs({ file: path.basename(bad), mode: "data", confirm: "blog" });
+    assert.equal((await waitJob((await rb.json()).job.id)).state, "failed");
   } finally { srv.kill(); }
 });

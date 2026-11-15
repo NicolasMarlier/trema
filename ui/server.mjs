@@ -335,8 +335,9 @@ const dbRun = (push, name, script, { stdin = null, stdout = null } = {}) => new 
   p.on("error", (e) => { push(`error: ${e.message}\n`); ok(false); });
   let piped = Promise.resolve();
   if (stdout) piped = pipeline(p.stdout, stdout).catch((e) => { push(`error: ${e.message}\n`); p.kill(); });
-  if (stdin) pipeline(stdin, p.stdin).catch(() => {}); else p.stdin.end();
-  p.on("close", async (code) => { await piped; ok(code === 0); });
+  let inErr = null;
+  if (stdin) pipeline(stdin, p.stdin).catch((e) => { inErr = e; push(`error: flux d'entrée interrompu (${e.message})\n`); p.kill(); }); else p.stdin.end();
+  p.on("close", async (code) => { await piped; ok(code === 0 && !inErr); });
 });
 const compose = (push, name, args) => new Promise((ok) => {
   const p = spawn("docker", ["compose", ...args], { cwd: composeDir(name), env: composeEnv(name) });
@@ -360,12 +361,24 @@ function readHead(file, n = 4096) {
   try { const b = Buffer.alloc(n); return b.subarray(0, fs.readSync(fd, b, 0, n, 0)); } finally { fs.closeSync(fd); }
 }
 
+// Unique, never-overwriting name: bump the stamp by one second until the file (and its .part) are free.
+const reserved = new Set();
+function freshName(app, kind = "manual", ext = "dump") {
+  for (let t = Date.now(); ; t += 1000) {
+    const file = dumpFileName(app, dumpStamp(new Date(t)), kind, ext), dest = path.join(DUMPS, file);
+    if (reserved.has(file) || fs.existsSync(dest) || fs.existsSync(`${dest}.part`)) continue;
+    reserved.add(file); setTimeout(() => reserved.delete(file), 60000).unref();
+    return file;
+  }
+}
+
 async function makeDump(push, name, file) {
   const dest = path.join(DUMPS, file), tmp = `${dest}.part`;
   try { fs.mkdirSync(DUMPS, { recursive: true }); } catch {}
   push(`pg_dump -Fc → ${dest}\n`);
   const ok = await dbRun(push, name, dumpScript(), { stdout: fs.createWriteStream(tmp, { mode: 0o644 }) });
   if (!ok) { fs.rmSync(tmp, { force: true }); return false; }
+  if (fs.existsSync(dest)) { fs.rmSync(tmp, { force: true }); push(`error: ${file} existe déjà, refus de l'écraser\n`); return false; }
   fs.renameSync(tmp, dest);
   push(`${(fs.statSync(dest).size / 1e6).toFixed(1)} Mo écrits\n`);
   return true;
@@ -377,7 +390,7 @@ async function restoreDump(push, name, file, mode) {
   if (!head) { push("error: format de dump non reconnu\n"); return false; }
   const format = head === "custom" ? "custom" : "sql";
   const input = () => head === "gzip" ? fs.createReadStream(src).pipe(zlib.createGunzip()) : fs.createReadStream(src);
-  const safety = dumpFileName(name, dumpStamp(), "pre-restore");
+  const safety = freshName(name, "pre-restore");
   push(`Format détecté : ${head} · mode : ${mode === "full" ? "remplacer tout" : "données seulement"}\n`);
   let webStopped = false, ok = true, safetyDone = false;
   const steps = planSteps(mode);
@@ -405,7 +418,7 @@ async function receiveUpload(name, req, res, url) {
   const len = Number(req.headers["content-length"] ?? 0);
   if (len > MAX_UPLOAD) return json(res, 413, { error: `Fichier trop gros (max ${MAX_UPLOAD / 1048576} Mo).` });
   fs.mkdirSync(DUMPS, { recursive: true });
-  const file = dumpFileName(name, dumpStamp(), "upload", ext);
+  const file = freshName(name, "upload", ext);
   const dest = path.join(DUMPS, file), tmp = `${dest}.part`;
   let n = 0;
   const limit = async function* (src) { for await (const c of src) { n += c.length; if (n > MAX_UPLOAD) throw new Error("too large"); yield c; } };
@@ -416,6 +429,7 @@ async function receiveUpload(name, req, res, url) {
     fs.rmSync(tmp, { force: true });
     return json(res, 400, { error: "Le contenu ne correspond pas à l'extension (format non reconnu)." });
   }
+  if (fs.existsSync(dest)) { fs.rmSync(tmp, { force: true }); return json(res, 409, { error: "Un dump portant ce nom existe déjà, réessayez." }); }
   fs.renameSync(tmp, dest);
   return json(res, 201, { file, size: n, format });
 }
@@ -425,7 +439,7 @@ async function handleDb(name, parts, req, res, url, ip) {
   const what = parts[4], f = parts[5];
   if (what === "dumps" && !f && req.method === "GET") return json(res, 200, listDumps(name));
   if (what === "dumps" && !f && req.method === "POST") {
-    const file = dumpFileName(name, dumpStamp());
+    const file = freshName(name);
     const r = startJob(name, "db-dump", [], { task: (push) => makeDump(push, name, file) });
     return r.error ? json(res, 409, { error: r.error, job: jobView(r.job, false) }) : json(res, 202, { job: jobView(r.job, false), file });
   }
